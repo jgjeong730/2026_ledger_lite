@@ -44,6 +44,14 @@ def is_configured() -> bool:
     return bool(config.KAKAO_REST_API_KEY)
 
 
+def _with_client_secret(data: dict) -> dict:
+    """카카오 콘솔에서 '카카오 로그인' 클라이언트 시크릿을 활성화한 경우 토큰 요청에 함께 실어 보낸다.
+    비활성화 상태(KAKAO_CLIENT_SECRET 미설정)면 그냥 원래 데이터를 반환한다."""
+    if config.KAKAO_CLIENT_SECRET:
+        data["client_secret"] = config.KAKAO_CLIENT_SECRET
+    return data
+
+
 def _require_configured() -> None:
     if not is_configured():
         raise KakaoNotConfiguredError(
@@ -102,12 +110,12 @@ def exchange_code_for_token(code: str) -> None:
     _require_configured()
     response = requests.post(
         _TOKEN_URL,
-        data={
+        data=_with_client_secret({
             "grant_type": "authorization_code",
             "client_id": config.KAKAO_REST_API_KEY,
             "redirect_uri": config.KAKAO_REDIRECT_URI,
             "code": code,
-        },
+        }),
         headers={"Content-Type": "application/x-www-form-urlencoded;charset=utf-8"},
         timeout=10,
     )
@@ -119,11 +127,11 @@ def exchange_code_for_token(code: str) -> None:
 def _refresh_access_token(refresh_token: str) -> None:
     response = requests.post(
         _TOKEN_URL,
-        data={
+        data=_with_client_secret({
             "grant_type": "refresh_token",
             "client_id": config.KAKAO_REST_API_KEY,
             "refresh_token": refresh_token,
-        },
+        }),
         headers={"Content-Type": "application/x-www-form-urlencoded;charset=utf-8"},
         timeout=10,
     )

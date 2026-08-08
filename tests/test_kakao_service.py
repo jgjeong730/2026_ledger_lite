@@ -34,6 +34,12 @@ def token_file(tmp_path, monkeypatch):
 def configured(monkeypatch):
     monkeypatch.setattr(config, "KAKAO_REST_API_KEY", "test-rest-api-key")
     monkeypatch.setattr(config, "KAKAO_REDIRECT_URI", "http://localhost:8501")
+    monkeypatch.setattr(config, "KAKAO_CLIENT_SECRET", None)
+
+
+@pytest.fixture()
+def configured_with_secret(configured, monkeypatch):
+    monkeypatch.setattr(config, "KAKAO_CLIENT_SECRET", "test-client-secret")
 
 
 @pytest.fixture()
@@ -68,6 +74,7 @@ def test_exchange_code_for_token_saves_tokens(configured, token_file, monkeypatc
         assert url == "https://kauth.kakao.com/oauth/token"
         assert data["grant_type"] == "authorization_code"
         assert data["code"] == "abc123"
+        assert "client_secret" not in data  # 클라이언트 시크릿 미설정 시 아예 보내지 않아야 함
         return FakeResponse(200, {"access_token": "AT1", "refresh_token": "RT1", "expires_in": 21600, "refresh_token_expires_in": 5184000})
 
     monkeypatch.setattr(kakao_service.requests, "post", fake_post)
@@ -78,6 +85,32 @@ def test_exchange_code_for_token_saves_tokens(configured, token_file, monkeypatc
     assert tokens["access_token"] == "AT1"
     assert tokens["refresh_token"] == "RT1"
     assert kakao_service.is_logged_in() is True
+
+
+def test_exchange_code_for_token_includes_client_secret_when_configured(configured_with_secret, token_file, monkeypatch):
+    def fake_post(url, data=None, headers=None, timeout=None):
+        assert data["client_secret"] == "test-client-secret"
+        return FakeResponse(200, {"access_token": "AT1", "refresh_token": "RT1", "expires_in": 21600})
+
+    monkeypatch.setattr(kakao_service.requests, "post", fake_post)
+
+    kakao_service.exchange_code_for_token("abc123")
+
+
+def test_refresh_access_token_includes_client_secret_when_configured(configured_with_secret, token_file, monkeypatch):
+    token_file.write_text(
+        json.dumps({"access_token": "OLD", "access_token_expires_at": time.time() - 10, "refresh_token": "RT1"}),
+        encoding="utf-8",
+    )
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        assert data["grant_type"] == "refresh_token"
+        assert data["client_secret"] == "test-client-secret"
+        return FakeResponse(200, {"access_token": "NEW", "expires_in": 21600})
+
+    monkeypatch.setattr(kakao_service.requests, "post", fake_post)
+
+    assert kakao_service.get_valid_access_token() == "NEW"
 
 
 def test_exchange_code_for_token_raises_on_error_response(configured, token_file, monkeypatch):
