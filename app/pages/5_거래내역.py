@@ -2,11 +2,13 @@ import pandas as pd
 import streamlit as st
 
 from app.db.connection import init_db
+from app.db.seed_categories import seed_categories
 from app.services.category_service import list_expense_categories, list_income_categories
 from app.services.receipt_service import list_receipts, reclassify_and_learn
 
 st.set_page_config(page_title="거래내역 - ledger-lite", page_icon="\U0001F4CB", layout="wide")
 init_db()
+seed_categories()
 
 st.title("\U0001F4CB 거래내역 확인 / 재분류")
 

@@ -2,15 +2,18 @@
 
 이 모듈이 4개 입력 채널(카드문자/카카오페이/영수증/은행이체)을 각각
 capture -> ocr_result -> receipt -> classification 흐름으로 연결하는 지점이다.
-AI 분류(4단계)가 아직 없으므로, 이번 단계의 기본 분류 우선순위는:
+카드문자/은행이체는 아직 AI 분류(4단계 예정)가 없어 기본 분류 우선순위는:
     1) merchant_rules에 사용자가 학습시킨 규칙이 있으면 그것을 적용 (classified_by='rule')
     2) 카카오페이는 항상 라이프스타일비>소셜/네트워킹 고정 배정 (classified_by='rule')
     3) 그 외에는 '미분류·확인필요'로 두고 사용자 확인을 기다림 (classified_by='default')
+영수증 이미지는 3단계부터 Claude Vision이 OCR과 분류를 한 번에 처리한다 (classified_by='ai').
+API 키가 없으면 vision_service가 예외를 던지고, 호출부가 수동 입력으로 안내한다.
 """
 
 import json
 import re
 from dataclasses import asdict
+from datetime import date
 
 from app.db.connection import get_connection
 from app.parsers.card_sms_parser import CardSmsParseError, parse_card_sms
@@ -22,8 +25,14 @@ from app.services.capture_service import (
     mark_capture_status,
 )
 from app.services.category_service import (
+    get_category_id,
     get_kakaopay_default_category_id,
     get_uncategorized_category_id,
+)
+from app.services.vision_service import (
+    VisionNotConfiguredError,
+    VisionRequestError,
+    analyze_receipt_image,
 )
 
 # ============================================================
@@ -366,7 +375,8 @@ def ingest_receipt_image_manual(
     category_id: int,
     memo: str | None = None,
 ) -> dict:
-    """영수증 이미지를 업로드하되, OCR은 아직 연결되지 않아(3단계) 사용자가 필드를 직접 입력한다."""
+    """영수증 이미지를 업로드하되 사용자가 필드를 직접 입력한다. OCR(analyze_receipt_image)이 실패했거나
+    API 키가 없을 때, 또는 사용자가 AI 인식 결과 대신 처음부터 직접 입력하길 원할 때 쓰는 경로다."""
     capture_id = create_image_capture(image_path, status="parsed")
     ocr_result_id = create_ocr_result(
         capture_id=capture_id,
@@ -391,10 +401,76 @@ def ingest_receipt_image_manual(
         memo=memo,
         review_status="confirmed",
     )
-    classify_receipt(
-        receipt_id, category_id, "user", note="영수증 업로드 시 사용자가 직접 분류 (OCR은 3단계에서 연결 예정)"
-    )
+    classify_receipt(receipt_id, category_id, "user", note="영수증 업로드 시 사용자가 직접 분류")
     return {"status": "ok", "receipt_id": receipt_id}
+
+
+def ingest_receipt_image_ocr(*, image_path: str, image_bytes: bytes, filename: str, memo: str | None = None) -> dict:
+    """Claude Vision으로 영수증 이미지를 OCR + 분류까지 한 번에 처리한다 (PROJECT_BRIEF 3절).
+
+    API 키가 없거나(VisionNotConfiguredError) Claude 호출이 실패하면(VisionRequestError) capture만
+    남기고 상태를 'failed'로 표시한 뒤 호출부에 알린다 - 호출부(영수증 업로드 페이지)는 이 경우
+    ingest_receipt_image_manual()의 수동 입력 폼으로 사용자를 안내해야 한다.
+    """
+    capture_id = create_image_capture(image_path, status="pending")
+
+    try:
+        analysis = analyze_receipt_image(image_bytes, filename)
+    except (VisionNotConfiguredError, VisionRequestError) as e:
+        mark_capture_status(capture_id, "failed", str(e))
+        return {"status": "ocr_unavailable", "capture_id": capture_id, "error": str(e)}
+
+    mark_capture_status(capture_id, "parsed")
+    ocr_result_id = create_ocr_result(
+        capture_id=capture_id,
+        engine="claude_vision_ocr",
+        merchant_name=analysis.merchant_name,
+        amount=analysis.amount,
+        txn_date=analysis.txn_date,
+        txn_time=analysis.txn_time,
+        flow_direction="outflow",
+        confidence=analysis.confidence,
+        raw_output=analysis.raw_response,
+    )
+
+    if analysis.major_category and analysis.minor_category:
+        category_id = get_category_id("expense", analysis.major_category, analysis.minor_category)
+    else:
+        category_id = None
+    if category_id is None:
+        category_id = get_uncategorized_category_id()
+
+    receipt_id = create_receipt(
+        capture_id=capture_id,
+        ocr_result_id=ocr_result_id,
+        entry_type="expense",
+        source_type="receipt_image",
+        flow_direction="outflow",
+        merchant_name=analysis.merchant_name,
+        amount=analysis.amount or 0,
+        transaction_date=analysis.txn_date or date.today().isoformat(),
+        transaction_time=analysis.txn_time,
+        memo=memo,
+        review_status="needs_review",
+    )
+    classify_receipt(
+        receipt_id,
+        category_id,
+        "ai",
+        confidence=analysis.confidence,
+        note=f"Claude Vision 자동 인식/분류 (신뢰도 {analysis.confidence:.2f})",
+    )
+
+    return {
+        "status": "ok",
+        "receipt_id": receipt_id,
+        "merchant": analysis.merchant_name,
+        "amount": analysis.amount,
+        "txn_date": analysis.txn_date,
+        "major_category": analysis.major_category or "미분류·확인필요",
+        "minor_category": analysis.minor_category,
+        "confidence": analysis.confidence,
+    }
 
 
 def create_manual_entry(

@@ -3,11 +3,13 @@ from datetime import date
 import streamlit as st
 
 from app.db.connection import init_db
+from app.db.seed_categories import seed_categories
 from app.services.category_service import list_expense_categories, list_income_categories
 from app.services.receipt_service import create_manual_entry
 
 st.set_page_config(page_title="은행이체 수동입력 - ledger-lite", page_icon="\U0001F3E6")
 init_db()
+seed_categories()
 
 st.title("\U0001F3E6 은행이체 / 수동입력")
 st.caption(

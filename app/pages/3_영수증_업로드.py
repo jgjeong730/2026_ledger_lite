@@ -3,23 +3,51 @@ from datetime import date, datetime
 import streamlit as st
 
 from app.db.connection import init_db
+from app.db.seed_categories import seed_categories
 from app.services.capture_service import save_receipt_image
 from app.services.category_service import list_expense_categories
-from app.services.receipt_service import ingest_receipt_image_manual
+from app.services.receipt_service import ingest_receipt_image_manual, ingest_receipt_image_ocr
+from app.services.vision_service import is_configured
 
 st.set_page_config(page_title="영수증 업로드 - ledger-lite", page_icon="\U0001F9FE")
 init_db()
+seed_categories()
 
 st.title("\U0001F9FE 영수증 업로드")
-st.caption(
-    "실물 영수증 사진을 올려주세요. Claude Vision OCR 자동 인식은 3단계에서 연결되며, "
-    "지금은 사진을 보며 직접 내용을 입력하는 방식입니다."
-)
+st.caption("실물 영수증 사진을 올려주세요. Claude Vision이 자동으로 읽고 분류합니다.")
 
 uploaded = st.file_uploader("영수증 이미지", type=["jpg", "jpeg", "png"])
 
 if uploaded:
     st.image(uploaded, width=300)
+
+    if is_configured():
+        if st.button("\U0001F916 AI로 자동 인식 & 등록", type="primary"):
+            image_bytes = uploaded.getvalue()
+            with st.spinner("Claude Vision으로 영수증을 읽는 중..."):
+                image_path = save_receipt_image(image_bytes, uploaded.name)
+                result = ingest_receipt_image_ocr(
+                    image_path=image_path, image_bytes=image_bytes, filename=uploaded.name
+                )
+            if result["status"] == "ok":
+                category_label = result["major_category"]
+                if result.get("minor_category"):
+                    category_label += f" > {result['minor_category']}"
+                st.success(
+                    f"등록 완료: {result['merchant'] or '(가맹점 미인식)'} {result['amount']:,}원 "
+                    f"({result['txn_date']}) - {category_label} · 신뢰도 {result['confidence']:.0%}"
+                )
+                st.caption("'거래내역' 페이지에서 인식 결과를 확인하고 필요하면 수정하세요.")
+            else:
+                st.warning(f"AI 인식에 실패했습니다: {result['error']}\n아래에서 직접 입력해주세요.")
+    else:
+        st.info(
+            "ANTHROPIC_API_KEY가 설정되지 않아 AI 자동 인식을 사용할 수 없습니다. "
+            "아래에서 직접 입력해주세요 (.env에 키를 추가하면 자동 인식이 활성화됩니다)."
+        )
+
+    st.divider()
+    st.subheader("직접 입력")
     categories = list_expense_categories()
 
     with st.form("receipt_form"):

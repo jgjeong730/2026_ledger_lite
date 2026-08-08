@@ -14,7 +14,7 @@
 |---|---|---|
 | 1 | 프로젝트 구조 & DB 스키마 | ✅ |
 | 2 | 영수증 업로드 + 수동 입력 MVP | ✅ |
-| 3 | OCR 연결 (Claude Vision) | 예정 |
+| 3 | OCR 연결 (Claude Vision) | ✅ |
 | 4 | AI 분류 연결 (Claude API) | 예정 |
 | 5 | 대시보드 (Streamlit + Plotly) | 예정 |
 | 6 | 카카오 로그인 & 알림 | 예정 |
@@ -40,6 +40,7 @@ app/
     capture_service.py
     category_service.py
     receipt_service.py    # merchant_rules 학습 루프 포함
+    vision_service.py      # Claude Vision OCR+분류 (structured outputs)
   pages/                 # Streamlit 멀티페이지
     1_카드문자_입력.py
     2_카카오페이_입력.py
@@ -54,6 +55,7 @@ tests/
   test_db_schema.py      # DB 스키마 검증 테스트
   test_parsers.py         # 파서 단위 테스트
   test_receipt_service.py # 파이프라인/학습 루프 테스트
+  test_vision_service.py  # OCR 오프라인(키 없음 폴백) 테스트
 ```
 
 ## DB 스키마 설계
@@ -76,7 +78,7 @@ tests/
 |---|---|---|
 | 카드 승인문자 | `card_sms` | 정규식 파싱 → `ocr_results` → AI/규칙 분류 |
 | 카카오페이 송금 | `kakaopay` | 정규식 파싱 → `ocr_results` → **라이프스타일비 > 소셜/네트워킹 고정 배정** |
-| 영수증 촬영 | `receipt_image` | Claude Vision OCR(3단계) → `ocr_results` → AI 분류 |
+| 영수증 촬영 | `receipt_image` | Claude Vision이 OCR+분류를 한 번에 처리 → `ocr_results` → AI 분류 (키 없으면 수동 입력) |
 | 은행 계좌이체 | `bank_manual` | 자동 파싱 없음. `receipts`에 `capture_id=NULL`로 직접 수동 입력 |
 
 연금/투자 관련 테이블은 존재하지 않는다.
@@ -93,6 +95,19 @@ AI 분류(4단계)가 아직 없으므로, 카드문자/카카오페이는 정�
 같은 가맹점의 다음 카드문자부터 자동으로 적용된다 (PROJECT_BRIEF 6절의 학습 요구사항).
 
 중복 붙여넣기는 `captures.raw_text` 일치 여부로 감지해 건너뛴다.
+
+## 3단계: Claude Vision OCR + 분류
+
+영수증 이미지는 Claude Opus 5에 **한 번의 API 호출**로 OCR과 카테고리 분류를 동시에 요청한다
+(`app/services/vision_service.py`). 카테고리는 자유 텍스트가 아니라 `output_config.format`의
+JSON Schema `enum`으로 강제해서, 모델이 5대분류 체계 밖의 카테고리를 만들어낼 수 없게 한다.
+
+- `ANTHROPIC_API_KEY`가 없으면 `VisionNotConfiguredError`를 던지고, 영수증 업로드 페이지는
+  2단계에서 만든 수동 입력 폼으로 자연스럽게 안내한다 (PROJECT_BRIEF 6절: 키 없이도 로컬 모드로
+  전체 흐름을 테스트할 수 있어야 한다).
+- AI가 분류한 거래는 항상 `review_status='needs_review'`로 시작해 '거래내역' 페이지에서 사용자
+  확인을 거친다. 사용자가 수정하면 2단계의 `merchant_rules` 학습 루프에도 그대로 반영된다.
+- 단순 인식/분류 작업이라 `output_config.effort`는 `low`로 설정해 비용과 지연을 낮췄다.
 
 ## 시작하기
 
