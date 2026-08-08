@@ -15,20 +15,21 @@ st.set_page_config(page_title="대시보드 - ledger-lite", page_icon="\U0001F4C
 init_db()
 seed_categories()
 
-# 대분류 고정 배색 (dataviz 스킬 카테고리컬 팔레트, 다크모드 슬롯 1~5). categories 시드 순서와 동일하게
-# 항상 같은 대분류가 같은 색을 갖도록 고정한다 - 대분류가 늘거나 줄어도 나머지 배색은 흔들리지 않는다.
+# 대분류 고정 배색 (dataviz 스킬 카테고리컬 팔레트, 라이트모드 슬롯 1~5 - 앱 테마가 라이트라서 라이트
+# 서피스 기준 대비를 통과하는 값을 쓴다). categories 시드 순서와 동일하게 항상 같은 대분류가 같은
+# 색을 갖도록 고정한다 - 대분류가 늘거나 줄어도 나머지 배색은 흔들리지 않는다.
 MAJOR_CATEGORY_COLORS = {
-    "고정비": "#3987e5",
-    "변동비": "#d95926",
-    "라이프스타일비": "#199e70",
-    "가족·경조사비": "#c98500",
-    "비정기 대형지출": "#d55181",
+    "고정비": "#2a78d6",
+    "변동비": "#eb6834",
+    "라이프스타일비": "#1baf7a",
+    "가족·경조사비": "#eda100",
+    "비정기 대형지출": "#e87ba4",
     "미분류·확인필요": "#898781",  # 시스템 상태값 - 카테고리컬 슬롯이 아니라 무채색 muted로 구분
 }
-EXPENSE_COLOR = "#3987e5"
-INCOME_COLOR = "#199e70"
-GRID_COLOR = "#2c2c2a"
-TEXT_COLOR = "#c3c2b7"
+EXPENSE_COLOR = "#2a78d6"
+INCOME_COLOR = "#1baf7a"
+GRID_COLOR = "#e1e0d9"
+TEXT_COLOR = "#52514e"
 
 CHART_LAYOUT_DEFAULTS = dict(
     paper_bgcolor="rgba(0,0,0,0)",
