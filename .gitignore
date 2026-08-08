@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# 로컬 SQLite DB (스키마는 코드로 관리, 데이터 파일은 커밋하지 않음)
+data/*.db
+data/*.db-journal
+data/*.sqlite3
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+.pytest_cache/
+.DS_Store
