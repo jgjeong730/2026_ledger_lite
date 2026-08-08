@@ -6,6 +6,7 @@ sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.nam
 
 import streamlit as st
 
+from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services.capture_service import save_receipt_image
@@ -14,6 +15,7 @@ from app.services.receipt_service import ingest_receipt_image_manual, ingest_rec
 from app.services.vision_service import is_configured
 
 st.set_page_config(page_title="영수증 업로드 - ledger-lite", page_icon="\U0001F9FE")
+require_login()
 init_db()
 seed_categories()
 

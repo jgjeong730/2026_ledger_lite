@@ -6,6 +6,7 @@ sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.nam
 import plotly.graph_objects as go
 import streamlit as st
 
+from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services.dashboard_service import (
@@ -17,6 +18,7 @@ from app.services.dashboard_service import (
 )
 
 st.set_page_config(page_title="대시보드 - ledger-lite", page_icon="\U0001F4CA", layout="wide")
+require_login()
 init_db()
 seed_categories()
 

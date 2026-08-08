@@ -5,12 +5,14 @@ sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.nam
 
 import streamlit as st
 
+from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services import kakao_service
 from app.services.dashboard_service import available_months, build_monthly_report_text
 
 st.set_page_config(page_title="카카오 알림 - ledger-lite", page_icon="\U0001F4AC")
+require_login()
 init_db()
 seed_categories()
 

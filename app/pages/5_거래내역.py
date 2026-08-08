@@ -6,12 +6,14 @@ sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.nam
 import pandas as pd
 import streamlit as st
 
+from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services.category_service import list_expense_categories, list_income_categories
 from app.services.receipt_service import list_receipts, reclassify_and_learn
 
 st.set_page_config(page_title="거래내역 - ledger-lite", page_icon="\U0001F4CB", layout="wide")
+require_login()
 init_db()
 seed_categories()
 

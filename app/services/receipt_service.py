@@ -567,6 +567,28 @@ def list_receipts(*, limit: int = 300, review_status: str | None = None, entry_t
     return [dict(r) for r in rows]
 
 
+def list_receipts_for_month(month: str) -> list[dict]:
+    """해당 월('YYYY-MM')의 전체 거래를 날짜 오름차순으로 반환한다 (백업 내보내기용)."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT r.id, r.entry_type, r.source_type, r.flow_direction, r.merchant_name, r.amount,
+                   r.transaction_date, r.transaction_time, r.memo, r.review_status, r.is_manual_entry,
+                   cat.major_category, cat.minor_category, cl.classified_by
+            FROM receipts r
+            LEFT JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
+            LEFT JOIN categories cat ON cat.id = cl.category_id
+            WHERE strftime('%Y-%m', r.transaction_date) = ?
+            ORDER BY r.transaction_date ASC, r.id ASC
+            """,
+            (month,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
 def summary_counts() -> dict:
     conn = get_connection()
     try:

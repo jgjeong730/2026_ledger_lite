@@ -181,3 +181,20 @@ def test_summary_counts(db):
     counts = svc.summary_counts()
     assert counts["total_receipts"] == 2
     assert counts["needs_review"] == 2
+
+
+def test_list_receipts_for_month_filters_and_orders_by_date(db):
+    category_id = get_category_id("income", "수입", "연금인출유입")
+    svc.create_manual_entry(
+        entry_type="income", merchant_name=None, amount=1000, transaction_date="2026-07-15", category_id=category_id
+    )
+    svc.create_manual_entry(
+        entry_type="income", merchant_name=None, amount=2000, transaction_date="2026-08-01", category_id=category_id
+    )
+    svc.create_manual_entry(
+        entry_type="income", merchant_name=None, amount=3000, transaction_date="2026-08-20", category_id=category_id
+    )
+
+    rows = svc.list_receipts_for_month("2026-08")
+    assert [r["amount"] for r in rows] == [2000, 3000]
+    assert all(r["transaction_date"].startswith("2026-08") for r in rows)

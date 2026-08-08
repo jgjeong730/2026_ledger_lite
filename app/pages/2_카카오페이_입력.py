@@ -5,12 +5,14 @@ sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.nam
 
 import streamlit as st
 
+from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.parsers.kakaopay_parser import split_messages
 from app.services.receipt_service import ingest_kakaopay
 
 st.set_page_config(page_title="카카오페이 입력 - ledger-lite", page_icon="\U0001F4B8")
+require_login()
 init_db()
 seed_categories()
 
