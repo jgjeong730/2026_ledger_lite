@@ -17,7 +17,7 @@
 | 3 | OCR 연결 (Claude Vision) | ✅ |
 | 4 | AI 분류 연결 (Claude API) | ✅ |
 | 5 | 대시보드 (Streamlit + Plotly) | ✅ |
-| 6 | 카카오 로그인 & 알림 | 예정 |
+| 6 | 카카오 로그인 & 알림 | ✅ |
 
 ## 기술 스택
 
@@ -43,6 +43,7 @@ app/
     vision_service.py      # Claude Vision OCR+분류 (structured outputs)
     classification_service.py  # 카드문자 가맹점명 텍스트 분류 (structured outputs)
     dashboard_service.py    # 대시보드 집계 쿼리 (월별 요약, 카테고리별, 추이)
+    kakao_service.py       # 카카오 로그인(OAuth) + 나에게 보내기 메시지 전송
   pages/                 # Streamlit 멀티페이지
     1_카드문자_입력.py
     2_카카오페이_입력.py
@@ -50,9 +51,11 @@ app/
     4_은행이체_수동입력.py
     5_거래내역.py
     6_대시보드.py
+    7_카카오_알림.py
 data/
   ledger.db             # 로컬 SQLite DB 파일 (git에 커밋하지 않음)
   receipt_images/        # 업로드된 영수증 이미지 저장 위치
+  kakao_token.json       # 카카오 OAuth 토큰 (git에 커밋하지 않음)
 tests/
   fixtures/             # 카드문자/카카오페이/영수증 샘플 데이터
   test_db_schema.py      # DB 스키마 검증 테스트
@@ -61,6 +64,7 @@ tests/
   test_vision_service.py  # OCR 오프라인(키 없음 폴백) 테스트
   test_classification_service.py  # 텍스트 분류 오프라인 테스트
   test_dashboard_service.py  # 집계 쿼리 테스트
+  test_kakao_service.py  # OAuth/메시지 전송 오프라인 테스트 (requests 모킹)
 ```
 
 ## DB 스키마 설계
@@ -144,6 +148,26 @@ Plotly로 시각화한다.
 - **소분류 지출 TOP 10 / 카테고리별 상세 테이블** — 미분류 항목도 포함해 상세 테이블 합계가 항상
   KPI의 "지출" 값과 정확히 일치하도록 했다 (확인이 얼마나 밀려있는지 숨기지 않는다).
 - 월 선택 셀렉트박스로 과거 달을 조회할 수 있고, 거래가 아직 없으면 빈 차트 대신 안내 메시지를 보여준다.
+
+## 6단계: 카카오 로그인 & 알림
+
+`app/services/kakao_service.py`가 카카오 로그인(OAuth 인가 코드 방식)과 카카오톡
+'나에게 보내기'(`POST /v2/api/talk/memo/default/send`, 별도 사용권한 신청 불필요)를 담당한다.
+
+- Redirect URI가 카카오 개발자 콘솔에 홈 화면(`KAKAO_REDIRECT_URI`, 기본
+  `http://localhost:8501`)으로 고정 등록되어 있어, 로그인 콜백(`?code=...`)은 서브페이지가
+  아니라 `app/main.py`에서 받아 토큰을 교환한다.
+- 1인용 로컬 앱이므로 OAuth 토큰은 DB가 아니라 `data/kakao_token.json`에 저장한다 (다른 로컬
+  전용 파일들과 동일하게 git에 커밋하지 않음). access_token 만료 시 refresh_token으로 자동
+  갱신하고, refresh_token 자체가 만료되면 재로그인을 안내한다.
+- `KAKAO_REST_API_KEY`가 없으면 '카카오 알림' 페이지가 설정 안내로 대체된다 (다른 AI 기능들과
+  동일한 로컬 모드 폴백 원칙).
+- 리포트 내용은 `dashboard_service.build_monthly_report_text()`가 그 달의 지출/수입/순증감/
+  대분류별 지출을 텍스트로 정리해서 만든다.
+- 실제 카카오 로그인은 사용자의 카카오 계정 인증이 필요해 자동화 테스트나 브라우저 자동화로
+  대신 수행하지 않았다 — 인가 URL 생성, 토큰 교환/갱신, 메시지 전송 요청 구성은 `requests`를
+  모킹한 오프라인 테스트로 검증했고, 실제 로그인/전송은 사용자가 '카카오 알림' 페이지에서
+  직접 확인해야 한다.
 
 ## 시작하기
 

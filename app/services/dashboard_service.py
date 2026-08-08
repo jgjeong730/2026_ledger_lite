@@ -134,3 +134,26 @@ def monthly_trend(months_back: int = 6) -> list[dict]:
     finally:
         conn.close()
     return [dict(r) for r in reversed(rows)]
+
+
+def build_monthly_report_text(month: str) -> str:
+    """카카오톡 '나에게 보내기'로 보낼 월간 리포트 텍스트 (6단계)."""
+    summary = monthly_summary(month)
+    majors = expense_by_major_category(month)
+
+    lines = [
+        f"\U0001F4CA ledger-lite {month} 리포트",
+        "",
+        f"지출 {summary['expense']:,}원 / 수입 {summary['income']:,}원",
+        f"순증감 {summary['net']:+,}원",
+    ]
+    if summary["needs_review"] > 0:
+        lines.append(f"⚠️ 확인 필요 {summary['needs_review']}건")
+
+    if majors:
+        lines.append("")
+        lines.append("[대분류별 지출]")
+        for row in majors:
+            lines.append(f"- {row['major_category']}: {row['amount']:,}원")
+
+    return "\n".join(lines)

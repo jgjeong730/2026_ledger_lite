@@ -9,6 +9,9 @@ data/*.db
 data/*.db-journal
 data/*.sqlite3
 
+# 카카오 OAuth 토큰 (민감정보, 로컬 전용)
+data/kakao_token.json
+
 # Streamlit secrets
 .streamlit/secrets.toml
 

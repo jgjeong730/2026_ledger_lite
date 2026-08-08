@@ -125,3 +125,21 @@ def test_empty_db_returns_empty_results(db):
     assert dash.monthly_trend(6) == []
     summary = dash.monthly_summary("2026-08")
     assert summary == {"expense": 0, "income": 0, "net": 0, "needs_review": 0, "receipt_count": 0}
+
+
+def test_build_monthly_report_text_includes_summary_and_categories(db):
+    _seed_sample_data()
+    text = dash.build_monthly_report_text("2026-08")
+
+    assert "2026-08" in text
+    assert "111,800원" in text  # 지출 합계 (100000+6800+5000)
+    assert "1,500,000원" in text  # 수입 합계
+    assert "변동비: 100,000원" in text
+    assert "라이프스타일비: 6,800원" in text
+    assert "미분류·확인필요: 5,000원" in text
+
+
+def test_build_monthly_report_text_empty_month_still_returns_text(db):
+    text = dash.build_monthly_report_text("2026-08")
+    assert "2026-08" in text
+    assert "지출 0원" in text
