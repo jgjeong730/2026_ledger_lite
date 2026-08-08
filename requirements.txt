@@ -5,7 +5,7 @@ python-dotenv==1.0.1
 anthropic>=0.80.0
 
 # 5단계(대시보드)부터 사용
-# plotly==5.24.0
+plotly==5.24.0
 
 # 테스트
 pytest==8.3.2

@@ -16,7 +16,7 @@
 | 2 | 영수증 업로드 + 수동 입력 MVP | ✅ |
 | 3 | OCR 연결 (Claude Vision) | ✅ |
 | 4 | AI 분류 연결 (Claude API) | ✅ |
-| 5 | 대시보드 (Streamlit + Plotly) | 예정 |
+| 5 | 대시보드 (Streamlit + Plotly) | ✅ |
 | 6 | 카카오 로그인 & 알림 | 예정 |
 
 ## 기술 스택
@@ -42,12 +42,14 @@ app/
     receipt_service.py    # merchant_rules 학습 루프 포함
     vision_service.py      # Claude Vision OCR+분류 (structured outputs)
     classification_service.py  # 카드문자 가맹점명 텍스트 분류 (structured outputs)
+    dashboard_service.py    # 대시보드 집계 쿼리 (월별 요약, 카테고리별, 추이)
   pages/                 # Streamlit 멀티페이지
     1_카드문자_입력.py
     2_카카오페이_입력.py
     3_영수증_업로드.py
     4_은행이체_수동입력.py
     5_거래내역.py
+    6_대시보드.py
 data/
   ledger.db             # 로컬 SQLite DB 파일 (git에 커밋하지 않음)
   receipt_images/        # 업로드된 영수증 이미지 저장 위치
@@ -58,6 +60,7 @@ tests/
   test_receipt_service.py # 파이프라인/학습 루프 테스트 (모킹된 AI 분류 경로 포함)
   test_vision_service.py  # OCR 오프라인(키 없음 폴백) 테스트
   test_classification_service.py  # 텍스트 분류 오프라인 테스트
+  test_dashboard_service.py  # 집계 쿼리 테스트
 ```
 
 ## DB 스키마 설계
@@ -124,6 +127,23 @@ JSON Schema `enum`으로 강제해서, 모델이 5대분류 체계 밖의 카테
   "미분류·확인필요"(`classified_by='default'`)로 폴백한다 — 항상 안전한 기본값을 보장한다.
 - AI로 분류된 거래도 `needs_review`로 시작하며, 사용자가 거래내역에서 확인/수정하면 그대로
   `merchant_rules`에 학습되어 같은 가맹점의 다음 문자부터는 규칙이 우선 적용된다.
+
+## 5단계: 대시보드
+
+`app/services/dashboard_service.py`가 순수 SQL 집계를 담당하고, `app/pages/6_대시보드.py`가
+Plotly로 시각화한다.
+
+- **최근 6개월 지출·수입 추이** — 선 그래프. 하나의 y축(원 단위)에 두 시리즈만 그려 이중축을
+  쓰지 않는다. x축은 "YYYY-MM" 카테고리로 고정한다 (그냥 두면 Plotly가 날짜로 오인해 주 단위로
+  쪼갠다).
+- **대분류별 지출** — 5대분류를 고정 색상(파랑/주황/아쿠아/노랑/마젠타)의 가로 막대로 비교한다.
+  부분-전체 관계는 파이 차트 대신 막대 비교가 더 정확하게 읽혀서 막대를 선택했다. "미분류·확인필요"는
+  카테고리컬 색이 아닌 무채색(회색)으로 구분해 실제 분류와 섞이지 않게 했다.
+  대분류 색상은 `categories` 시드 순서와 고정되어 있어 데이터가 바뀌어도 같은 대분류는 항상 같은
+  색을 갖는다.
+- **소분류 지출 TOP 10 / 카테고리별 상세 테이블** — 미분류 항목도 포함해 상세 테이블 합계가 항상
+  KPI의 "지출" 값과 정확히 일치하도록 했다 (확인이 얼마나 밀려있는지 숨기지 않는다).
+- 월 선택 셀렉트박스로 과거 달을 조회할 수 있고, 거래가 아직 없으면 빈 차트 대신 안내 메시지를 보여준다.
 
 ## 시작하기
 
