@@ -8,6 +8,14 @@
 입금되는 경우 "출처 분석 없이 금액만 수입으로 기록"하는 정도로만 취급한다. 자세한 배경은
 [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) 참고.
 
+## 프로젝트 한눈에 보기
+
+[![ledger-lite 프로젝트 한눈에 보기](docs/project-overview-preview.jpg)](docs/project-overview.html)
+
+앱 소개와 개발 프로세스를 정리한 한 페이지 요약. 위 이미지를 클릭하거나
+[docs/project-overview.html](docs/project-overview.html)을 다운로드해 브라우저로 열면 된다
+(빌드 없이 파일 하나로 동작).
+
 ## 개발 단계
 
 | 단계 | 내용 | 상태 |

@@ -1,0 +1,494 @@
+<title>ledger-lite 만들기 — 프로젝트 한눈에 보기</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f5f1;
+    --bg-soft-2: #efece4;
+    --line: #e1e0d9;
+    --ink: #38372f;
+    --ink-soft: #6d6a5f;
+    --ink-faint: #9d9a8d;
+    --blue: #2a78d6;
+    --blue-deep: #1d5aa8;
+    --blue-soft: #e6eef8;
+    --green: #1baf7a;
+    --green-soft: #e2f5ec;
+    --orange: #eb6834;
+    --orange-soft: #fdeae2;
+    --amber: #c47f00;
+    --amber-soft: #faf0da;
+    --pink: #cb5f85;
+    --pink-soft: #fbe9f0;
+    --grey: #898781;
+    --grey-soft: #ececea;
+    --shadow-sm: 0 1px 2px rgba(56,55,47,0.06);
+    --shadow-md: 0 10px 28px -16px rgba(56,55,47,0.28);
+    --sans: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
+    --mono: "Consolas", "D2Coding", "SFMono-Regular", monospace;
+  }
+  /* 브라이트모드 고정 — 뷰어/시스템 다크모드 설정과 무관하게 항상 밝게 표시 */
+
+  * { box-sizing: border-box; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+  }
+
+  .page { max-width: 1080px; margin: 0 auto; padding: 0 24px 90px; }
+
+  a { color: inherit; }
+
+  /* ===================== HERO ===================== */
+  .hero {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 40px;
+    align-items: center;
+    padding: 64px 0 40px;
+  }
+  .eyebrow {
+    display: inline-block;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--blue-deep);
+    background: var(--blue-soft);
+    border-radius: 999px;
+    padding: 6px 14px;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-size: clamp(32px, 4.4vw, 46px);
+    font-weight: 800;
+    margin: 0 0 14px;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .hero h1 .accent { color: var(--blue); }
+  .hero .lead {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0 0 26px;
+  }
+  .stat-row { display: flex; gap: 28px; flex-wrap: wrap; }
+  .stat { }
+  .stat b {
+    display: block;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .stat span { font-size: 12.5px; color: var(--ink-soft); }
+
+  /* phone mockup */
+  .phone-wrap { display: flex; justify-content: center; }
+  .phone {
+    width: 240px;
+    border-radius: 34px;
+    background: #232219;
+    padding: 10px;
+    box-shadow: var(--shadow-md);
+  }
+  .phone .screen {
+    background: var(--bg);
+    border-radius: 26px;
+    overflow: hidden;
+    padding: 18px 16px 16px;
+  }
+  .phone .notch {
+    width: 64px; height: 6px; border-radius: 4px;
+    background: #3a3931; margin: 0 auto 12px;
+  }
+  .phone .app-title { font-size: 14px; font-weight: 800; margin: 0 0 2px; }
+  .phone .app-sub { font-size: 9.5px; color: var(--ink-faint); margin: 0 0 12px; }
+  .phone .kpi { font-size: 10px; color: var(--ink-soft); margin-bottom: 2px; }
+  .phone .kpi-num {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 19px; font-weight: 800; color: var(--ink); margin: 0 0 12px;
+  }
+  .phone .bars { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .phone .bar-row { display: flex; align-items: center; gap: 6px; }
+  .phone .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .phone .bar-track { flex: 1; height: 6px; border-radius: 3px; background: var(--bg-soft-2); overflow: hidden; }
+  .phone .bar-fill { height: 100%; border-radius: 3px; }
+  .phone .bar-label { font-size: 8.5px; color: var(--ink-faint); width: 46px; flex: none; }
+  .phone .kakao-btn {
+    display: block; text-align: center;
+    background: #fee500; color: #3c1e1e;
+    font-size: 11px; font-weight: 700;
+    border-radius: 8px; padding: 8px 0;
+  }
+
+  /* ===================== FEATURE STRIP ===================== */
+  .feature-strip {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    padding: 6px 0 46px;
+    border-bottom: 1px solid var(--line);
+  }
+  .feature-chip {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 14px 8px 10px;
+    font-size: 13px; font-weight: 600;
+  }
+  .feature-chip .ic {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex: none;
+  }
+
+  /* ===================== SECTION BANDS ===================== */
+  .band {
+    display: flex; align-items: center; gap: 12px;
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin: 64px 0 26px;
+    color: #fff;
+  }
+  .band .num {
+    font-family: var(--mono); font-weight: 800; font-size: 13px;
+    background: rgba(255,255,255,0.22);
+    border-radius: 6px; padding: 3px 9px;
+  }
+  .band h2 { font-size: 17px; margin: 0; font-weight: 800; letter-spacing: -0.01em; }
+  .band p { margin: 0 0 0 auto; font-size: 12.5px; opacity: 0.88; white-space: nowrap; }
+  .band-blue { background: var(--blue); }
+  .band-green { background: #12946a; }
+  .band-ink { background: var(--ink); }
+  .band-amber { background: #b06d00; }
+
+  .section-intro { color: var(--ink-soft); font-size: 14px; margin: 0 0 22px; max-width: 68ch; }
+
+  /* ===================== STAGE CARDS ===================== */
+  .stage-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .stage-card {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: var(--shadow-sm);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .stage-head { display: flex; align-items: center; gap: 10px; }
+  .stage-badge {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--blue-soft); color: var(--blue-deep);
+    font-family: var(--mono); font-weight: 800; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .stage-card h3 { font-size: 15px; margin: 0; font-weight: 800; }
+  .stage-card p.desc { font-size: 12.8px; color: var(--ink-soft); margin: 0; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag {
+    font-size: 10.5px; font-weight: 600; color: var(--ink-soft);
+    background: var(--bg-soft); border: 1px solid var(--line);
+    border-radius: 5px; padding: 3px 7px;
+  }
+  .outcome {
+    font-size: 11.5px; color: var(--green); font-weight: 700;
+    display: flex; align-items: baseline; gap: 5px; margin-top: auto;
+  }
+
+  /* ===================== ARCHITECTURE FLOW ===================== */
+  .flow {
+    display: flex; align-items: stretch; gap: 8px;
+    overflow-x: auto; padding-bottom: 6px;
+  }
+  .flow-col { display: flex; flex-direction: column; gap: 8px; min-width: 128px; }
+  .flow-col-title { font-size: 11px; font-weight: 700; color: var(--ink-faint); text-align: center; margin-bottom: 2px; }
+  .flow-tile {
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 8px; text-align: center; font-size: 11.5px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .flow-tile .ic { font-size: 18px; }
+  .flow-arrow {
+    align-self: center; color: var(--ink-faint); font-size: 20px; flex: none;
+  }
+  .flow-db {
+    background: var(--ink); color: #fff; border-radius: 10px;
+    padding: 14px 10px; text-align: center; font-size: 11.5px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    min-width: 100px; align-self: center;
+  }
+
+  /* ===================== CATEGORY GRID ===================== */
+  .category-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  .cat-tile {
+    border-radius: 12px; padding: 16px 16px 14px;
+    border: 1px solid var(--line);
+  }
+  .cat-tile h3 { font-size: 14.5px; margin: 0 0 6px; font-weight: 800; }
+  .cat-tile p { font-size: 12px; margin: 0; opacity: 0.85; }
+  .cat-fixed   { background: var(--blue-soft);   color: var(--blue-deep); }
+  .cat-var     { background: var(--orange-soft); color: #a2461a; }
+  .cat-life    { background: var(--green-soft);  color: #0f6e4c; }
+  .cat-family  { background: var(--amber-soft);  color: var(--amber); }
+  .cat-big     { background: var(--pink-soft);   color: var(--pink); }
+  .cat-unclass { background: var(--grey-soft);   color: var(--grey); }
+
+  /* ===================== ROADMAP ===================== */
+  .roadmap { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 8px; }
+  .rm-step {
+    min-width: 148px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px; box-shadow: var(--shadow-sm);
+  }
+  .rm-step .rm-ic { font-size: 18px; margin-bottom: 6px; }
+  .rm-step h4 { font-size: 12.8px; margin: 0 0 4px; font-weight: 800; }
+  .rm-step p { font-size: 11px; color: var(--ink-soft); margin: 0; }
+  .rm-arrow { color: var(--ink-faint); font-size: 18px; flex: none; }
+
+  /* ===================== IDEA GRID ===================== */
+  .idea-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .idea-card {
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px;
+  }
+  .idea-card .ic { font-size: 18px; margin-bottom: 8px; display: block; }
+  .idea-card h4 { font-size: 13px; margin: 0 0 4px; font-weight: 800; }
+  .idea-card p { font-size: 11.5px; color: var(--ink-soft); margin: 0; }
+
+  /* ===================== FOOTER CTA ===================== */
+  .footer-cta {
+    margin-top: 70px;
+    background: var(--ink);
+    color: #f3f1ea;
+    border-radius: 16px;
+    padding: 40px 36px;
+    text-align: center;
+  }
+  .footer-cta .tagline {
+    font-size: clamp(16px, 2.6vw, 21px);
+    font-weight: 800;
+    margin: 0 0 18px;
+    letter-spacing: -0.01em;
+  }
+  .footer-cta .tagline .step { color: #cfcabb; }
+  .footer-cta .tagline .arrow { color: var(--green); margin: 0 6px; }
+  .logo-mark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-weight: 800; font-size: 15px;
+  }
+  .logo-mark .badge {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; }
+    .phone-wrap { order: -1; }
+    .stage-grid, .category-grid, .idea-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .stage-grid, .category-grid, .idea-grid { grid-template-columns: 1fr; }
+    .band p { display: none; }
+  }
+</style>
+
+<div class="page">
+
+  <!-- ===================== HERO ===================== -->
+  <section class="hero">
+    <div>
+      <span class="eyebrow">개인 프로젝트 &middot; Claude Code와 함께 제작</span>
+      <h1>은퇴자금 가계부,<br><span class="accent">ledger-lite</span> 만들기</h1>
+      <p class="lead">카드문자·카카오페이·영수증·계좌이체를 찍거나 붙여넣기만 하면 AI가 자동으로 분류하고, 대시보드와 카카오톡 리포트로 소비를 알려주는 개인 은퇴자금 관리 앱.</p>
+      <div class="stat-row">
+        <div class="stat"><b>6</b><span>단계 커리큘럼</span></div>
+        <div class="stat"><b>4</b><span>입력 채널</span></div>
+        <div class="stat"><b>6</b><span>지출 대분류</span></div>
+        <div class="stat"><b>LIVE</b><span>Streamlit Cloud 배포</span></div>
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="screen">
+          <div class="notch"></div>
+          <p class="app-title">&#128176; ledger-lite</p>
+          <p class="app-sub">찍고 &rarr; AI가 읽고 &rarr; 자동 분류 &rarr; 리포트</p>
+          <p class="kpi">이번 달 지출</p>
+          <p class="kpi-num">1,342,600원</p>
+          <div class="bars">
+            <div class="bar-row"><span class="dot" style="background:var(--blue)"></span><span class="bar-track"><span class="bar-fill" style="width:70%;background:var(--blue)"></span></span><span class="bar-label">고정비</span></div>
+            <div class="bar-row"><span class="dot" style="background:var(--orange)"></span><span class="bar-track"><span class="bar-fill" style="width:45%;background:var(--orange)"></span></span><span class="bar-label">변동비</span></div>
+            <div class="bar-row"><span class="dot" style="background:var(--green)"></span><span class="bar-track"><span class="bar-fill" style="width:30%;background:var(--green)"></span></span><span class="bar-label">라이프스타일</span></div>
+            <div class="bar-row"><span class="dot" style="background:var(--amber)"></span><span class="bar-track"><span class="bar-fill" style="width:18%;background:var(--amber)"></span></span><span class="bar-label">가족·경조사</span></div>
+          </div>
+          <span class="kakao-btn">&#128172; 카카오톡으로 리포트 받기</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FEATURE STRIP ===================== -->
+  <div class="feature-strip">
+    <span class="feature-chip"><span class="ic" style="background:var(--blue-soft)">&#128241;</span>카드문자 자동 파싱</span>
+    <span class="feature-chip"><span class="ic" style="background:var(--green-soft)">&#128184;</span>카카오페이 입력</span>
+    <span class="feature-chip"><span class="ic" style="background:var(--orange-soft)">&#129790;</span>영수증 OCR</span>
+    <span class="feature-chip"><span class="ic" style="background:var(--pink-soft)">&#129504;</span>AI 자동 분류</span>
+    <span class="feature-chip"><span class="ic" style="background:var(--amber-soft)">&#128202;</span>대시보드</span>
+    <span class="feature-chip"><span class="ic" style="background:#fef6cc">&#128172;</span>카카오톡 알림</span>
+    <span class="feature-chip"><span class="ic" style="background:var(--grey-soft)">&#128274;</span>비밀번호 게이트</span>
+    <span class="feature-chip"><span class="ic" style="background:var(--blue-soft)">&#128190;</span>월별 백업</span>
+  </div>
+
+  <!-- ===================== 1. 6단계 커리큘럼 ===================== -->
+  <div class="band band-blue">
+    <span class="num">01</span>
+    <h2>6단계로 완성한 가계부</h2>
+    <p>입력 → 인식 → 분류 → 시각화 → 알림</p>
+  </div>
+  <p class="section-intro">입력 채널을 하나씩 늘려가며, 사람이 직접 정리하던 일을 AI와 자동화로 옮기는 순서로 설계했다.</p>
+
+  <div class="stage-grid">
+    <div class="stage-card">
+      <div class="stage-head"><span class="stage-badge">1</span><h3>카드문자 입력</h3></div>
+      <p class="desc">카드 승인문자를 붙여넣으면 정규식으로 가맹점·금액·일시를 자동 추출. 여러 건 한 번에 붙여넣어도 자동으로 나눠 처리.</p>
+      <div class="tag-row"><span class="tag">정규식 파싱</span><span class="tag">SQLite 스키마</span></div>
+      <div class="outcome">&#10003; 문자 복붙만으로 거래 등록</div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-head"><span class="stage-badge" style="background:var(--green-soft);color:#0f6e4c">2</span><h3>카카오페이 입력</h3></div>
+      <p class="desc">송금 내역을 붙여넣으면 자동 파싱. 상대가 사람이라 가맹점 분류가 불가능한 특성을 반영해 소셜/네트워킹으로 고정 배정.</p>
+      <div class="tag-row"><span class="tag">정규식 파싱</span><span class="tag">고정 분류 규칙</span></div>
+      <div class="outcome">&#10003; 송금 내역도 놓치지 않고 기록</div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-head"><span class="stage-badge" style="background:var(--orange-soft);color:#a2461a">3</span><h3>영수증 업로드 &amp; OCR</h3></div>
+      <p class="desc">영수증 사진을 올리면 Claude Vision이 금액·가맹점·날짜를 읽어낸다. 키가 없거나 실패하면 수동 입력으로 자연스럽게 전환.</p>
+      <div class="tag-row"><span class="tag">Claude Vision API</span><span class="tag">폴백 설계</span></div>
+      <div class="outcome">&#10003; 사진 한 장으로 영수증 등록</div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-head"><span class="stage-badge" style="background:var(--pink-soft);color:var(--pink)">4</span><h3>AI 자동 분류 &amp; 학습</h3></div>
+      <p class="desc">가맹점명을 Claude로 분류하고, 사용자가 재분류하면 그 가맹점 규칙을 학습해 다음부터는 규칙이 AI보다 먼저 적용된다.</p>
+      <div class="tag-row"><span class="tag">Claude 프롬프트 설계</span><span class="tag">규칙 학습(merchant_rules)</span></div>
+      <div class="outcome">&#10003; 쓸수록 분류가 정확해짐</div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-head"><span class="stage-badge" style="background:var(--amber-soft);color:var(--amber)">5</span><h3>대시보드</h3></div>
+      <p class="desc">최근 6개월 지출·수입 추이, 대분류별 지출, 소분류 TOP 10을 한 화면에서 확인. 카테고리 배색은 항상 같은 대분류가 같은 색을 갖도록 고정.</p>
+      <div class="tag-row"><span class="tag">Plotly</span><span class="tag">집계 쿼리</span><span class="tag">라이트모드 배색</span></div>
+      <div class="outcome">&#10003; 이번 달 소비가 한눈에</div>
+    </div>
+    <div class="stage-card">
+      <div class="stage-head"><span class="stage-badge">6</span><h3>카카오 로그인 &amp; 알림</h3></div>
+      <p class="desc">카카오 OAuth2.0으로 로그인하고, '나에게 보내기'로 월간 리포트를 카카오톡으로 직접 받는다.</p>
+      <div class="tag-row"><span class="tag">Kakao OAuth 2.0</span><span class="tag">Talk Memo API</span></div>
+      <div class="outcome">&#10003; 리포트가 카카오톡으로 도착</div>
+    </div>
+  </div>
+
+  <!-- ===================== 2. 전체 구조 ===================== -->
+  <div class="band band-ink">
+    <span class="num">02</span>
+    <h2>전체 구조 — 입력부터 알림까지</h2>
+    <p>4개 채널 &rarr; 처리 &rarr; DB &rarr; 3개 서비스</p>
+  </div>
+  <p class="section-intro">채널마다 형식은 다르지만 <b>capture → ocr_result → receipt → classification</b>이라는 같은 파이프라인을 지나 한 곳(SQLite)에 모인다.</p>
+
+  <div class="flow">
+    <div class="flow-col">
+      <div class="flow-col-title">입력 채널</div>
+      <div class="flow-tile"><span class="ic">&#128241;</span>카드문자</div>
+      <div class="flow-tile"><span class="ic">&#128184;</span>카카오페이</div>
+      <div class="flow-tile"><span class="ic">&#129790;</span>영수증 사진</div>
+      <div class="flow-tile"><span class="ic">&#127974;</span>은행이체 수동</div>
+    </div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-col">
+      <div class="flow-col-title">처리</div>
+      <div class="flow-tile"><span class="ic">&#128269;</span>정규식 / Vision OCR</div>
+      <div class="flow-tile"><span class="ic">&#129504;</span>AI · 규칙 분류</div>
+    </div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-db"><span class="ic" style="font-size:20px">&#128451;&#65039;</span>SQLite<br>receipts</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-col">
+      <div class="flow-col-title">서비스</div>
+      <div class="flow-tile"><span class="ic">&#128202;</span>대시보드</div>
+      <div class="flow-tile"><span class="ic">&#128172;</span>카카오 알림</div>
+      <div class="flow-tile"><span class="ic">&#128190;</span>월별 백업</div>
+    </div>
+  </div>
+
+  <!-- ===================== 3. 카테고리 설계 ===================== -->
+  <div class="band band-green">
+    <span class="num">03</span>
+    <h2>소비 카테고리 설계 (대분류 6개)</h2>
+    <p>대시보드 배색과 그대로 연결</p>
+  </div>
+  <p class="section-intro">대시보드 차트의 배색과 완전히 같은 색을 써서, 어디서 보든 같은 대분류는 항상 같은 색으로 보이게 했다.</p>
+
+  <div class="category-grid">
+    <div class="cat-tile cat-fixed"><h3>고정비</h3><p>관리비·통신비·보험료 등 매달 고정 지출</p></div>
+    <div class="cat-tile cat-var"><h3>변동비</h3><p>식비·교통·주유 등 달마다 달라지는 지출</p></div>
+    <div class="cat-tile cat-life"><h3>라이프스타일비</h3><p>소셜·취미·여가 — 카카오페이 송금 기본 배정</p></div>
+    <div class="cat-tile cat-family"><h3>가족·경조사비</h3><p>가족 지원, 경조사비</p></div>
+    <div class="cat-tile cat-big"><h3>비정기 대형지출</h3><p>가전·여행 등 가끔 발생하는 큰 지출</p></div>
+    <div class="cat-tile cat-unclass"><h3>미분류·확인필요</h3><p>AI가 확신 못한 거래 — 검토 대기</p></div>
+  </div>
+
+  <!-- ===================== 4. 로드맵 ===================== -->
+  <div class="band band-amber">
+    <span class="num">04</span>
+    <h2>실사용까지의 로드맵</h2>
+    <p>하루 만에 로컬 → 배포 → 보안까지</p>
+  </div>
+  <p class="section-intro">6단계 커리큘럼을 끝낸 뒤, 실제로 폰에서 매일 쓸 수 있는 상태로 만드는 데 걸린 여정.</p>
+
+  <div class="roadmap">
+    <div class="rm-step"><div class="rm-ic">&#128421;&#65039;</div><h4>로컬 완성</h4><p>6단계 기능 + 카카오 연동 확인</p></div>
+    <div class="rm-arrow">&rarr;</div>
+    <div class="rm-step"><div class="rm-ic">&#9728;&#65039;</div><h4>라이트모드 + GitHub</h4><p>취향 반영 후 저장소 배포</p></div>
+    <div class="rm-arrow">&rarr;</div>
+    <div class="rm-step"><div class="rm-ic">&#9729;&#65039;</div><h4>Streamlit Cloud 배포</h4><p>빌드 실패 2건 해결</p></div>
+    <div class="rm-arrow">&rarr;</div>
+    <div class="rm-step"><div class="rm-ic">&#128241;</div><h4>폰에 설치</h4><p>홈 화면에 추가</p></div>
+    <div class="rm-arrow">&rarr;</div>
+    <div class="rm-step"><div class="rm-ic">&#128274;</div><h4>보안 + 백업</h4><p>비밀번호 게이트, 월별 CSV, 캘린더 리마인더</p></div>
+  </div>
+
+  <!-- ===================== 5. 발전 아이디어 ===================== -->
+  <div class="band band-blue">
+    <span class="num">05</span>
+    <h2>더 발전시킬 아이디어</h2>
+    <p>실사용하며 다음에 고를 것</p>
+  </div>
+
+  <div class="idea-grid">
+    <div class="idea-card"><span class="ic">&#128241;</span><h4>PWA 설치</h4><p>주소창 없이 완전한 앱 화면으로</p></div>
+    <div class="idea-card"><span class="ic">&#128101;</span><h4>멀티유저</h4><p>가족 각자 로그인해 각자의 가계부 관리</p></div>
+    <div class="idea-card"><span class="ic">&#9729;&#65039;</span><h4>영구 DB 이전</h4><p>SQLite &rarr; Supabase로 데이터 유실 위험 제거</p></div>
+    <div class="idea-card"><span class="ic">&#128231;</span><h4>문자·메일 자동 수집</h4><p>붙여넣기 없이 자동 수신</p></div>
+    <div class="idea-card"><span class="ic">&#127919;</span><h4>예산·목표 관리</h4><p>카테고리별 월 예산 설정 및 초과 알림</p></div>
+    <div class="idea-card"><span class="ic">&#128172;</span><h4>AI 소비 코치</h4><p>"이번 달 외식비 얼마?" 자연어 질의응답</p></div>
+  </div>
+
+  <!-- ===================== FOOTER ===================== -->
+  <div class="footer-cta">
+    <p class="tagline">
+      <span class="step">찍고</span><span class="arrow">&rarr;</span><span class="step">AI가 읽고</span><span class="arrow">&rarr;</span><span class="step">자동 분류</span><span class="arrow">&rarr;</span><span class="step">대시보드로 확인</span><span class="arrow">&rarr;</span><span class="step">카카오톡 리포트</span>
+    </p>
+    <span class="logo-mark"><span class="badge">&#128176;</span>ledger-lite</span>
+  </div>
+
+</div>
