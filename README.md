@@ -184,6 +184,32 @@ streamlit run app/main.py
 
 첫 실행 시 `data/ledger.db`가 자동 생성되고 스키마/카테고리 시드가 채워진다.
 
+## Streamlit Community Cloud 배포 (폰 접속용)
+
+PROJECT_BRIEF 3절의 배포 계획: "우선 로컬 실행 → 안정화 후 Streamlit Community Cloud → 폰 접속용".
+
+1. [share.streamlit.io](https://share.streamlit.io)에 GitHub 계정으로 로그인
+2. "New app" → 이 저장소(`jgjeong730/2026_ledger_lite`) 선택, 브랜치 `main`, 메인 파일 경로
+   `app/main.py` 입력 후 배포
+3. 앱 설정(Settings) → **Secrets**에 아래 내용을 TOML 형식으로 붙여넣기 (`.env`가 아니라 Streamlit
+   Cloud 고유의 시크릿 관리 방식이라 `app/config.py`가 `st.secrets`도 함께 읽도록 되어 있다):
+   ```toml
+   ANTHROPIC_API_KEY = "..."
+   KAKAO_REST_API_KEY = "..."
+   KAKAO_CLIENT_SECRET = "..."
+   KAKAO_REDIRECT_URI = "https://<배포된-앱-주소>.streamlit.app"
+   ```
+4. 배포된 URL이 정해지면, 카카오 개발자 콘솔 → 앱 설정 → 플랫폼 키 → REST API 키 수정 →
+   "카카오 로그인 리다이렉트 URI"에 그 URL을 **추가로** 등록 (기존 `localhost:8501`은 로컬
+   개발용으로 남겨둬도 된다). 위 Secrets의 `KAKAO_REDIRECT_URI`도 이 URL로 맞춘다.
+5. Secrets 저장 후 앱 재부팅(Reboot)
+
+**⚠️ 알려진 한계 — 데이터 영속성**: 이 앱은 `data/ledger.db`(로컬 SQLite 파일)에 데이터를 저장한다.
+Streamlit Community Cloud의 파일시스템은 컨테이너가 재시작되거나 재배포될 때 초기화될 수 있어,
+그 시점에 지금까지 입력한 가계부 데이터가 사라질 수 있다. 무료 배포로 빠르게 폰에서 써보는
+용도로는 괜찮지만, 데이터를 안정적으로 보존하려면 Supabase 등 외부 DB로 전환이 필요하다
+(브리프에도 이 가능성이 언급되어 있음 — 현재는 로컬 SQLite 그대로 유지).
+
 ## 테스트
 
 ```bash

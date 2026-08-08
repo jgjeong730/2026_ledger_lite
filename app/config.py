@@ -5,6 +5,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _get_secret(key: str, default: str | None = None) -> str | None:
+    """환경변수(.env, OS env)를 우선 확인하고, 없으면 Streamlit Cloud의 st.secrets를 확인한다.
+    로컬 개발/테스트처럼 Streamlit 런타임/시크릿 파일이 없는 환경에서는 조용히 default로 넘어간다."""
+    value = os.getenv(key)
+    if value:
+        return value
+    try:
+        import streamlit as st
+
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -12,13 +27,13 @@ DATA_DIR.mkdir(exist_ok=True)
 RECEIPTS_IMAGE_DIR = DATA_DIR / "receipt_images"
 RECEIPTS_IMAGE_DIR.mkdir(exist_ok=True)
 
-DB_PATH = os.getenv("DB_PATH", str(DATA_DIR / "ledger.db"))
+DB_PATH = _get_secret("DB_PATH", str(DATA_DIR / "ledger.db"))
 
 # 3단계(OCR)/4단계(AI 분류)부터 사용. 키가 없으면 로컬/스텁 모드로 동작해야 한다.
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_API_KEY = _get_secret("ANTHROPIC_API_KEY")
 
 # 6단계부터 사용
-KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY")
-KAKAO_REDIRECT_URI = os.getenv("KAKAO_REDIRECT_URI", "http://localhost:8501")
+KAKAO_REST_API_KEY = _get_secret("KAKAO_REST_API_KEY")
+KAKAO_REDIRECT_URI = _get_secret("KAKAO_REDIRECT_URI", "http://localhost:8501")
 # 카카오 콘솔에서 "카카오 로그인" 클라이언트 시크릿을 활성화한 경우에만 필요 (없으면 None -> 토큰 요청에서 생략)
-KAKAO_CLIENT_SECRET = os.getenv("KAKAO_CLIENT_SECRET")
+KAKAO_CLIENT_SECRET = _get_secret("KAKAO_CLIENT_SECRET")
