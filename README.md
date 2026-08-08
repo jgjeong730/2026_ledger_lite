@@ -13,7 +13,7 @@
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | 프로젝트 구조 & DB 스키마 | ✅ |
-| 2 | 영수증 업로드 + 수동 입력 MVP | 예정 |
+| 2 | 영수증 업로드 + 수동 입력 MVP | ✅ |
 | 3 | OCR 연결 (Claude Vision) | 예정 |
 | 4 | AI 분류 연결 (Claude API) | 예정 |
 | 5 | 대시보드 (Streamlit + Plotly) | 예정 |
@@ -28,17 +28,32 @@ Streamlit + 로컬 SQLite. OCR/분류는 Claude API로 통합 (3~4단계). 차�
 ```
 app/
   config.py            # 환경변수, 경로 설정
-  main.py              # Streamlit 진입점
+  main.py              # Streamlit 진입점 (홈 화면)
   db/
     schema.sql          # DB 스키마 (DDL)
     connection.py        # SQLite 연결/초기화
     seed_categories.py   # 카테고리 기본값 시드
+  parsers/              # 카드문자/카카오페이 정규식 파서 (AI 미사용)
+    card_sms_parser.py
+    kakaopay_parser.py
+  services/              # capture -> ocr_result -> receipt -> classification 파이프라인
+    capture_service.py
+    category_service.py
+    receipt_service.py    # merchant_rules 학습 루프 포함
+  pages/                 # Streamlit 멀티페이지
+    1_카드문자_입력.py
+    2_카카오페이_입력.py
+    3_영수증_업로드.py
+    4_은행이체_수동입력.py
+    5_거래내역.py
 data/
   ledger.db             # 로컬 SQLite DB 파일 (git에 커밋하지 않음)
   receipt_images/        # 업로드된 영수증 이미지 저장 위치
 tests/
   fixtures/             # 카드문자/카카오페이/영수증 샘플 데이터
   test_db_schema.py      # DB 스키마 검증 테스트
+  test_parsers.py         # 파서 단위 테스트
+  test_receipt_service.py # 파이프라인/학습 루프 테스트
 ```
 
 ## DB 스키마 설계
@@ -66,6 +81,19 @@ tests/
 
 연금/투자 관련 테이블은 존재하지 않는다.
 
+## 2단계: 입력 채널 & 학습 루프
+
+AI 분류(4단계)가 아직 없으므로, 카드문자/카카오페이는 정규식 파싱 후 다음 우선순위로 기본 분류한다.
+
+1. `merchant_rules`에 사용자가 학습시킨 규칙이 있으면 적용 (`classified_by='rule'`)
+2. 카카오페이는 항상 라이프스타일비 > 소셜/네트워킹으로 고정 배정
+3. 그 외에는 "미분류·확인필요" 상태로 두고 '거래내역' 페이지에서 확인 대기
+
+'거래내역' 페이지에서 카테고리를 수정하면 해당 가맹점명 기준 규칙이 `merchant_rules`에 저장되어,
+같은 가맹점의 다음 카드문자부터 자동으로 적용된다 (PROJECT_BRIEF 6절의 학습 요구사항).
+
+중복 붙여넣기는 `captures.raw_text` 일치 여부로 감지해 건너뛴다.
+
 ## 시작하기
 
 ```bash
@@ -82,5 +110,5 @@ streamlit run app/main.py
 ## 테스트
 
 ```bash
-pytest tests/test_db_schema.py -v
+pytest tests/ -v
 ```

@@ -1,44 +1,50 @@
-"""ledger-lite Streamlit 진입점.
+"""ledger-lite Streamlit 진입점 (홈 화면).
 
-1단계(프로젝트 구조 & DB 스키마) 시점에는 DB 초기화/카테고리 시드 상태를 확인하는
-최소 화면만 제공한다. 영수증 업로드/수동 입력 UI는 2단계에서 구현한다.
+입력 채널별 화면은 app/pages/ 각 페이지에서 담당한다:
+    1_카드문자_입력, 2_카카오페이_입력, 3_영수증_업로드, 4_은행이체_수동입력, 5_거래내역
 """
 
 import streamlit as st
 
-from app.db.connection import get_connection, init_db
+from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
+from app.services.receipt_service import list_receipts, summary_counts
 
 st.set_page_config(page_title="ledger-lite", page_icon="\U0001F4B0")
 
 init_db()
 seed_categories()
 
-st.title("ledger-lite")
-st.caption("은퇴 후 생활비 소비 관리 - 1단계: 프로젝트 구조 & DB 스키마")
+st.title("\U0001F4B0 ledger-lite")
+st.caption("찍고 → AI가 읽고 → 자동 분류 → 대시보드로 확인 → 카카오톡으로 리포트 받기")
 
-conn = get_connection()
-try:
-    tables = [
-        row["name"]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+counts = summary_counts()
+col1, col2, col3 = st.columns(3)
+col1.metric("이번 달 지출", f"{counts['this_month_expense']:,}원")
+col2.metric("전체 거래 건수", f"{counts['total_receipts']}건")
+col3.metric("확인 필요", f"{counts['needs_review']}건")
+
+if counts["needs_review"] > 0:
+    st.warning(f"미분류/확인 대기 중인 거래가 {counts['needs_review']}건 있습니다. 왼쪽 '거래내역' 페이지에서 확인하세요.")
+
+st.divider()
+st.subheader("입력하기")
+st.markdown(
+    "- **\U0001F4F1 카드문자 입력** — 카드 승인문자 붙여넣기 (자동 파싱)\n"
+    "- **\U0001F4B8 카카오페이 입력** — 송금 내역 붙여넣기 (소셜/네트워킹 자동 배정)\n"
+    "- **\U0001F9FE 영수증 업로드** — 영수증 사진 업로드 (OCR은 3단계에서 자동화 예정, 현재는 직접 입력)\n"
+    "- **\U0001F3E6 은행이체 수동입력** — 계좌이체/출금, 연금인출유입/기타수입\n"
+    "- **\U0001F4CB 거래내역** — 전체 내역 확인 및 카테고리 재분류\n"
+    "\n왼쪽 사이드바에서 페이지를 선택하세요."
+)
+
+recent = list_receipts(limit=5)
+if recent:
+    st.divider()
+    st.subheader("최근 거래")
+    for r in recent:
+        icon = "\U0001F53B" if r["flow_direction"] == "outflow" else "\U0001F53A"
+        category = (r["major_category"] or "미분류") + (
+            f" > {r['minor_category']}" if r["minor_category"] else ""
         )
-    ]
-    st.subheader("DB 테이블")
-    st.write(tables)
-
-    st.subheader("카테고리 시드 현황")
-    rows = conn.execute(
-        """
-        SELECT entry_type, major_category, COUNT(*) AS cnt
-        FROM categories
-        GROUP BY entry_type, major_category
-        ORDER BY entry_type, MIN(sort_order)
-        """
-    ).fetchall()
-    st.table([dict(r) for r in rows])
-finally:
-    conn.close()
-
-st.success("DB 초기화 및 카테고리 시드 완료. 2단계(영수증 업로드 + 수동 입력)에서 이어집니다.")
+        st.write(f"{icon} {r['transaction_date']} · {r['merchant_name'] or '-'} · {r['amount']:,}원 · {category}")
