@@ -9,6 +9,7 @@ from app.db import connection as db_connection  # noqa: E402
 from app.db.seed_categories import seed_categories  # noqa: E402
 from app.services import receipt_service as svc  # noqa: E402
 from app.services.category_service import get_category_id  # noqa: E402
+from app.services.classification_service import ClassificationRequestError, MerchantClassification  # noqa: E402
 
 CARD_SMS_1 = "[Web발신] 현대카드M 승인 정*구 100,000원 일시불 08/08 09:48 대신주유소 누적669,523원"
 CARD_SMS_2 = "[Web발신] 현대카드M 승인 정*구 7,000원 일시불 08/08 09:51 대신주유소 누적676,523원"
@@ -68,6 +69,52 @@ def test_ingest_kakaopay_defaults_to_social_networking(db):
     assert receipts[0]["major_category"] == "라이프스타일비"
     assert receipts[0]["minor_category"] == "소셜/네트워킹"
     assert receipts[0]["flow_direction"] == "outflow"
+
+
+def test_ingest_card_sms_uses_ai_classification_when_no_rule_matches(db, monkeypatch):
+    monkeypatch.setattr(
+        svc,
+        "classify_merchant",
+        lambda *, merchant_name, amount: MerchantClassification(
+            major_category="변동비", minor_category="교통·주유", confidence=0.87, raw_response="{}"
+        ),
+    )
+
+    result = svc.ingest_card_sms(CARD_SMS_1)
+    assert result["status"] == "ok"
+    assert result["classified_by"] == "ai"
+
+    receipts = svc.list_receipts()
+    assert receipts[0]["major_category"] == "변동비"
+    assert receipts[0]["minor_category"] == "교통·주유"
+
+
+def test_ingest_card_sms_ai_returns_uncategorized_falls_back_to_default(db, monkeypatch):
+    monkeypatch.setattr(
+        svc,
+        "classify_merchant",
+        lambda *, merchant_name, amount: MerchantClassification(
+            major_category=None, minor_category=None, confidence=0.3, raw_response="{}"
+        ),
+    )
+
+    result = svc.ingest_card_sms(CARD_SMS_1)
+    assert result["classified_by"] == "default"
+    receipts = svc.list_receipts()
+    assert receipts[0]["major_category"] == "미분류·확인필요"
+
+
+def test_ingest_card_sms_ai_error_falls_back_to_default(db, monkeypatch):
+    def _raise(*, merchant_name, amount):
+        raise ClassificationRequestError("boom")
+
+    monkeypatch.setattr(svc, "classify_merchant", _raise)
+
+    result = svc.ingest_card_sms(CARD_SMS_1)
+    assert result["status"] == "ok"
+    assert result["classified_by"] == "default"
+    receipts = svc.list_receipts()
+    assert receipts[0]["major_category"] == "미분류·확인필요"
 
 
 def test_reclassify_learns_merchant_rule_and_applies_to_next_capture(db):

@@ -71,3 +71,29 @@ def get_kakaopay_default_category_id() -> int:
     if cat_id is None:
         raise RuntimeError("카테고리 '라이프스타일비 > 소셜/네트워킹'이 없습니다.")
     return cat_id
+
+
+UNCATEGORIZED_LABEL = "미분류"
+
+
+def category_enum_options() -> list[str]:
+    """'대분류>소분류' 형태의 지출 카테고리 전체 목록 + 미분류.
+
+    Claude에게 구조화된 출력(JSON Schema enum)으로 카테고리를 강제할 때 공용으로 쓴다
+    (vision_service의 영수증 OCR+분류, classification_service의 가맹점명 분류).
+    """
+    options = [
+        f"{major}>{minor['minor_category']}"
+        for major, minors in list_expense_categories().items()
+        for minor in minors
+    ]
+    options.append(UNCATEGORIZED_LABEL)
+    return options
+
+
+def parse_category_enum_value(value: str) -> tuple[str | None, str | None]:
+    """category_enum_options()가 반환한 값 하나를 (대분류, 소분류)로 분해한다. 미분류/형식 불일치는 (None, None)."""
+    if value and ">" in value:
+        major, minor = value.split(">", 1)
+        return major, minor
+    return None, None

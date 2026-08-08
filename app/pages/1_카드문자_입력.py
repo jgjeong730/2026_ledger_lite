@@ -30,7 +30,11 @@ if st.button("파싱해서 등록", type="primary", disabled=not raw.strip()):
             result = ingest_card_sms(msg)
             if result["status"] == "ok":
                 ok += 1
-                basis = "학습된 규칙 적용" if result["classified_by"] == "rule" else "미분류(확인 필요)"
+                basis = {
+                    "rule": "학습된 규칙 적용",
+                    "ai": "AI 자동 분류(확인 필요)",
+                    "default": "미분류(확인 필요)",
+                }.get(result["classified_by"], "확인 필요")
                 st.success(f"등록: {result['merchant']} {result['amount']:,}원 ({result['txn_date']}) - {basis}")
             elif result["status"] == "duplicate":
                 dup += 1

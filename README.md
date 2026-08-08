@@ -15,7 +15,7 @@
 | 1 | 프로젝트 구조 & DB 스키마 | ✅ |
 | 2 | 영수증 업로드 + 수동 입력 MVP | ✅ |
 | 3 | OCR 연결 (Claude Vision) | ✅ |
-| 4 | AI 분류 연결 (Claude API) | 예정 |
+| 4 | AI 분류 연결 (Claude API) | ✅ |
 | 5 | 대시보드 (Streamlit + Plotly) | 예정 |
 | 6 | 카카오 로그인 & 알림 | 예정 |
 
@@ -38,9 +38,10 @@ app/
     kakaopay_parser.py
   services/              # capture -> ocr_result -> receipt -> classification 파이프라인
     capture_service.py
-    category_service.py
+    category_service.py    # category_enum_options() - AI 구조화 출력용 카테고리 enum 공용 헬퍼
     receipt_service.py    # merchant_rules 학습 루프 포함
     vision_service.py      # Claude Vision OCR+분류 (structured outputs)
+    classification_service.py  # 카드문자 가맹점명 텍스트 분류 (structured outputs)
   pages/                 # Streamlit 멀티페이지
     1_카드문자_입력.py
     2_카카오페이_입력.py
@@ -54,8 +55,9 @@ tests/
   fixtures/             # 카드문자/카카오페이/영수증 샘플 데이터
   test_db_schema.py      # DB 스키마 검증 테스트
   test_parsers.py         # 파서 단위 테스트
-  test_receipt_service.py # 파이프라인/학습 루프 테스트
+  test_receipt_service.py # 파이프라인/학습 루프 테스트 (모킹된 AI 분류 경로 포함)
   test_vision_service.py  # OCR 오프라인(키 없음 폴백) 테스트
+  test_classification_service.py  # 텍스트 분류 오프라인 테스트
 ```
 
 ## DB 스키마 설계
@@ -76,7 +78,7 @@ tests/
 
 | 채널 | captures.source_type | 처리 |
 |---|---|---|
-| 카드 승인문자 | `card_sms` | 정규식 파싱 → `ocr_results` → AI/규칙 분류 |
+| 카드 승인문자 | `card_sms` | 정규식 파싱 → `ocr_results` → 규칙 매칭 우선, 없으면 Claude 텍스트 분류 |
 | 카카오페이 송금 | `kakaopay` | 정규식 파싱 → `ocr_results` → **라이프스타일비 > 소셜/네트워킹 고정 배정** |
 | 영수증 촬영 | `receipt_image` | Claude Vision이 OCR+분류를 한 번에 처리 → `ocr_results` → AI 분류 (키 없으면 수동 입력) |
 | 은행 계좌이체 | `bank_manual` | 자동 파싱 없음. `receipts`에 `capture_id=NULL`로 직접 수동 입력 |
@@ -85,11 +87,12 @@ tests/
 
 ## 2단계: 입력 채널 & 학습 루프
 
-AI 분류(4단계)가 아직 없으므로, 카드문자/카카오페이는 정규식 파싱 후 다음 우선순위로 기본 분류한다.
+카드문자/카카오페이는 정규식 파싱 후 다음 우선순위로 기본 분류한다.
 
 1. `merchant_rules`에 사용자가 학습시킨 규칙이 있으면 적용 (`classified_by='rule'`)
 2. 카카오페이는 항상 라이프스타일비 > 소셜/네트워킹으로 고정 배정
-3. 그 외에는 "미분류·확인필요" 상태로 두고 '거래내역' 페이지에서 확인 대기
+3. 카드문자는 규칙이 없으면 Claude로 가맹점명 기반 분류 시도 (4단계, `classified_by='ai'`)
+4. AI도 실패/미설정이거나 미분류로 판단하면 "미분류·확인필요" 상태로 두고 '거래내역'에서 확인 대기
 
 '거래내역' 페이지에서 카테고리를 수정하면 해당 가맹점명 기준 규칙이 `merchant_rules`에 저장되어,
 같은 가맹점의 다음 카드문자부터 자동으로 적용된다 (PROJECT_BRIEF 6절의 학습 요구사항).
@@ -108,6 +111,19 @@ JSON Schema `enum`으로 강제해서, 모델이 5대분류 체계 밖의 카테
 - AI가 분류한 거래는 항상 `review_status='needs_review'`로 시작해 '거래내역' 페이지에서 사용자
   확인을 거친다. 사용자가 수정하면 2단계의 `merchant_rules` 학습 루프에도 그대로 반영된다.
 - 단순 인식/분류 작업이라 `output_config.effort`는 `low`로 설정해 비용과 지연을 낮췄다.
+
+## 4단계: 카드문자 AI 분류 연결
+
+카카오페이(고정 배정)와 영수증(3단계 Vision)은 이미 자동 분류가 있어, 4단계는 **카드문자** 채널에
+남아있던 "규칙 없으면 무조건 미분류" 로직을 보강한다 (`app/services/classification_service.py`).
+
+- `merchant_rules`에 학습된 규칙이 없는 새 가맹점은 가맹점명(+금액)만으로 Claude에게 업종을
+  추정시켜 분류한다. vision_service와 마찬가지로 카테고리는 `output_config.format`의 JSON
+  Schema enum으로 강제한다 (공용 헬퍼: `category_service.category_enum_options()`).
+- AI가 "미분류"로 판단하거나 API 키가 없거나 호출이 실패하면, 기존과 동일하게
+  "미분류·확인필요"(`classified_by='default'`)로 폴백한다 — 항상 안전한 기본값을 보장한다.
+- AI로 분류된 거래도 `needs_review`로 시작하며, 사용자가 거래내역에서 확인/수정하면 그대로
+  `merchant_rules`에 학습되어 같은 가맹점의 다음 문자부터는 규칙이 우선 적용된다.
 
 ## 시작하기
 

@@ -15,11 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app import config
-from app.services.category_service import list_expense_categories
+from app.services.category_service import UNCATEGORIZED_LABEL, category_enum_options, parse_category_enum_value
 
 _MODEL = "claude-opus-5"
 _MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
-_UNCATEGORIZED_LABEL = "미분류"
 
 
 class VisionNotConfiguredError(RuntimeError):
@@ -46,17 +45,6 @@ def is_configured() -> bool:
     return bool(config.ANTHROPIC_API_KEY)
 
 
-def _category_enum() -> list[str]:
-    """'대분류>소분류' 형태의 허용 카테고리 전체 목록 + 미분류."""
-    options = [
-        f"{major}>{minor['minor_category']}"
-        for major, minors in list_expense_categories().items()
-        for minor in minors
-    ]
-    options.append(_UNCATEGORIZED_LABEL)
-    return options
-
-
 def _build_request(image_b64: str, media_type: str) -> dict:
     return {
         "model": _MODEL,
@@ -77,10 +65,10 @@ def _build_request(image_b64: str, media_type: str) -> dict:
                         },
                         "category": {
                             "type": "string",
-                            "enum": _category_enum(),
+                            "enum": category_enum_options(),
                             "description": (
                                 "아래 목록 중 가맹점 업종에 가장 적절한 '대분류>소분류' 하나. "
-                                f"확신이 없으면 '{_UNCATEGORIZED_LABEL}'"
+                                f"확신이 없으면 '{UNCATEGORIZED_LABEL}'"
                             ),
                         },
                         "confidence": {
@@ -141,11 +129,7 @@ def analyze_receipt_image(image_bytes: bytes, filename: str) -> ReceiptAnalysis:
 
     data = json.loads(text)
 
-    category = data.get("category") or _UNCATEGORIZED_LABEL
-    if ">" in category:
-        major, minor = category.split(">", 1)
-    else:
-        major, minor = None, None
+    major, minor = parse_category_enum_value(data.get("category") or UNCATEGORIZED_LABEL)
 
     amount = data.get("amount")
     return ReceiptAnalysis(

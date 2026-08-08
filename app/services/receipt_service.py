@@ -2,12 +2,15 @@
 
 이 모듈이 4개 입력 채널(카드문자/카카오페이/영수증/은행이체)을 각각
 capture -> ocr_result -> receipt -> classification 흐름으로 연결하는 지점이다.
-카드문자/은행이체는 아직 AI 분류(4단계 예정)가 없어 기본 분류 우선순위는:
-    1) merchant_rules에 사용자가 학습시킨 규칙이 있으면 그것을 적용 (classified_by='rule')
-    2) 카카오페이는 항상 라이프스타일비>소셜/네트워킹 고정 배정 (classified_by='rule')
-    3) 그 외에는 '미분류·확인필요'로 두고 사용자 확인을 기다림 (classified_by='default')
-영수증 이미지는 3단계부터 Claude Vision이 OCR과 분류를 한 번에 처리한다 (classified_by='ai').
-API 키가 없으면 vision_service가 예외를 던지고, 호출부가 수동 입력으로 안내한다.
+채널별 기본 분류 우선순위:
+    카드문자: 1) merchant_rules에 학습된 규칙 (classified_by='rule')
+             2) 없으면 Claude로 가맹점명 기반 분류 시도 (classified_by='ai', 4단계)
+             3) AI도 실패/미설정이면 '미분류·확인필요' (classified_by='default')
+    카카오페이: 항상 라이프스타일비>소셜/네트워킹 고정 배정 (classified_by='rule')
+    영수증 이미지: Claude Vision이 OCR과 함께 분류 (classified_by='ai', 3단계)
+    은행이체: 사용자가 직접 카테고리 선택 (classified_by='user')
+API 키가 없거나 호출이 실패하면 vision_service/classification_service가 예외를 던지고,
+호출부는 각 채널의 기존 폴백(미분류 또는 수동 입력)으로 안내한다.
 """
 
 import json
@@ -28,6 +31,11 @@ from app.services.category_service import (
     get_category_id,
     get_kakaopay_default_category_id,
     get_uncategorized_category_id,
+)
+from app.services.classification_service import (
+    ClassificationNotConfiguredError,
+    ClassificationRequestError,
+    classify_merchant,
 )
 from app.services.vision_service import (
     VisionNotConfiguredError,
@@ -280,11 +288,16 @@ def ingest_card_sms(raw_text: str) -> dict:
 
     rule = find_matching_rule(parsed.merchant, "card_sms")
     if rule:
-        category_id, classified_by, rule_id = rule["category_id"], "rule", rule["id"]
+        category_id = rule["category_id"]
+        classified_by = "rule"
+        rule_id = rule["id"]
+        confidence = None
         note = f"학습된 규칙 매칭: '{rule['pattern']}'"
     else:
-        category_id, classified_by, rule_id = get_uncategorized_category_id(), "default", None
-        note = "가맹점 규칙 없음 - 기본 미분류 (4단계 AI 분류 예정)"
+        category_id, classified_by, confidence, note = _classify_new_card_sms_merchant(
+            parsed.merchant, parsed.amount
+        )
+        rule_id = None
 
     receipt_id = create_receipt(
         capture_id=capture_id,
@@ -299,7 +312,9 @@ def ingest_card_sms(raw_text: str) -> dict:
         payment_method=parsed.company,
         review_status="needs_review",
     )
-    classify_receipt(receipt_id, category_id, classified_by, rule_id=rule_id, note=note)
+    classify_receipt(
+        receipt_id, category_id, classified_by, rule_id=rule_id, confidence=confidence, note=note
+    )
 
     return {
         "status": "ok",
@@ -309,6 +324,23 @@ def ingest_card_sms(raw_text: str) -> dict:
         "txn_date": parsed.txn_date,
         "classified_by": classified_by,
     }
+
+
+def _classify_new_card_sms_merchant(merchant_name: str, amount: int) -> tuple[int, str, float | None, str]:
+    """merchant_rules에 규칙이 없는 가맹점을 Claude로 분류 시도하고, 실패하면 미분류로 폴백한다."""
+    try:
+        result = classify_merchant(merchant_name=merchant_name, amount=amount)
+    except (ClassificationNotConfiguredError, ClassificationRequestError) as e:
+        return get_uncategorized_category_id(), "default", None, f"가맹점 규칙 없음, AI 분류 불가 - 기본 미분류 ({e})"
+
+    category_id = None
+    if result.major_category and result.minor_category:
+        category_id = get_category_id("expense", result.major_category, result.minor_category)
+
+    if category_id is None:
+        return get_uncategorized_category_id(), "default", result.confidence, "AI가 미분류로 판단"
+
+    return category_id, "ai", result.confidence, f"Claude 자동 분류 (신뢰도 {result.confidence:.2f})"
 
 
 def ingest_kakaopay(raw_text: str) -> dict:

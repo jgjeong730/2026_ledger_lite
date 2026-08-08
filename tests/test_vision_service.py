@@ -16,6 +16,7 @@ from app import config  # noqa: E402
 from app.db import connection as db_connection  # noqa: E402
 from app.db.seed_categories import CATEGORY_SEED, seed_categories  # noqa: E402
 from app.services import vision_service  # noqa: E402
+from app.services.category_service import category_enum_options  # noqa: E402
 from app.services.receipt_service import ingest_receipt_image_ocr  # noqa: E402
 
 
@@ -54,7 +55,7 @@ def test_analyze_receipt_image_raises_when_not_configured(no_api_key):
 
 
 def test_category_enum_matches_expense_categories(db):
-    enum_values = vision_service._category_enum()
+    enum_values = category_enum_options()
     expense_minor_count = sum(
         1 for entry_type, major, minor, is_system, _ in CATEGORY_SEED if entry_type == "expense" and not is_system
     )
