@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.name == "app").parent))
+
 import pandas as pd
 import streamlit as st
 

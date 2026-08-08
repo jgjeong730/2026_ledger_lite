@@ -7,6 +7,11 @@
 http://localhost:8501)으로 고정되어 있어, 로그인 콜백(?code=...)은 여기서 받는다.
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.name == "app").parent))
+
 import streamlit as st
 
 from app.db.connection import init_db
