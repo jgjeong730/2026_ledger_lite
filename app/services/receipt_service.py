@@ -263,19 +263,33 @@ def update_receipt(
     amount: int,
     transaction_date: str,
     memo: str | None,
+    flow_direction: str | None = None,
 ) -> None:
     """거래내역 화면에서 사용자가 잘못 입력된 거래처/금액/날짜/메모를 직접 고칠 때 사용.
-    원본 capture/ocr_result는 건드리지 않고 receipts만 갱신한다."""
+    원본 capture/ocr_result는 건드리지 않고 receipts만 갱신한다.
+
+    flow_direction은 카카오페이처럼 방향 표시 없이 파싱돼 항상 outflow로 등록되는 채널에서
+    실제로는 받은 돈이었을 때 바로잡는 용도. None이면 기존 값을 그대로 둔다."""
     conn = get_connection()
     try:
-        conn.execute(
-            """
-            UPDATE receipts
-            SET merchant_name = ?, amount = ?, transaction_date = ?, memo = ?
-            WHERE id = ?
-            """,
-            (merchant_name, amount, transaction_date, memo, receipt_id),
-        )
+        if flow_direction is not None:
+            conn.execute(
+                """
+                UPDATE receipts
+                SET merchant_name = ?, amount = ?, transaction_date = ?, memo = ?, flow_direction = ?
+                WHERE id = ?
+                """,
+                (merchant_name, amount, transaction_date, memo, flow_direction, receipt_id),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE receipts
+                SET merchant_name = ?, amount = ?, transaction_date = ?, memo = ?
+                WHERE id = ?
+                """,
+                (merchant_name, amount, transaction_date, memo, receipt_id),
+            )
         conn.commit()
     finally:
         conn.close()

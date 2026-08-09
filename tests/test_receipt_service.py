@@ -200,6 +200,21 @@ def test_update_receipt_changes_editable_fields(db):
     assert receipts[0]["memo"] == "오타 수정"
 
 
+def test_update_receipt_can_correct_flow_direction(db):
+    result = svc.ingest_kakaopay(KAKAOPAY_SENT)
+    assert svc.list_receipts()[0]["flow_direction"] == "outflow"
+
+    svc.update_receipt(
+        result["receipt_id"],
+        merchant_name="모임방A",
+        amount=6800,
+        transaction_date="2026-08-06",
+        memo=None,
+        flow_direction="inflow",
+    )
+    assert svc.list_receipts()[0]["flow_direction"] == "inflow"
+
+
 def test_delete_receipt_removes_it_and_allows_reingesting_same_text(db):
     result = svc.ingest_card_sms(CARD_SMS_1)
     assert svc.list_receipts() != []

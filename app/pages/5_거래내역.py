@@ -116,6 +116,19 @@ else:
                 )
                 new_memo = st.text_input("메모", value=r["memo"] or "", key=f"memo_{r['id']}")
 
+            new_flow_direction = None
+            if r["source_type"] == "kakaopay":
+                # 카카오페이는 방향 표시 없는 형식("상대방 금액 월/일")이면 항상 보낸 것으로
+                # 등록되므로, 실제로는 받은 돈이었을 때 여기서 바로잡을 수 있어야 한다.
+                direction_label = st.radio(
+                    "방향",
+                    ["보낸 것", "받은 것"],
+                    index=0 if r["flow_direction"] == "outflow" else 1,
+                    key=f"direction_{r['id']}",
+                    horizontal=True,
+                )
+                new_flow_direction = "outflow" if direction_label == "보낸 것" else "inflow"
+
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
                 if st.button("수정 저장", key=f"save_{r['id']}"):
@@ -125,6 +138,7 @@ else:
                         amount=int(new_amount),
                         transaction_date=new_date.isoformat(),
                         memo=new_memo.strip() or None,
+                        flow_direction=new_flow_direction,
                     )
                     st.success("수정되었습니다.")
                     st.rerun()

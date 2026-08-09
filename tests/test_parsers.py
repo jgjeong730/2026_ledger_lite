@@ -131,3 +131,24 @@ def test_parse_kakaopay_fixture_samples():
 def test_parse_kakaopay_invalid_format_raises():
     with pytest.raises(KakaopayParseError):
         parse_kakaopay("이것은 카카오페이 송금 메시지가 아닙니다")
+
+
+def test_split_kakaopay_line_format_yields_one_message_per_line():
+    raw = "테니스 6700원 7/3\n이희근 19500 7/3\n애플서비스 1100 7/14"
+    messages = split_kakaopay_messages(raw)
+    assert len(messages) == 3
+
+
+def test_parse_kakaopay_line_format_without_tag():
+    parsed = parse_kakaopay("테니스 6700원 7/3", reference_date=date(2026, 8, 9))
+    assert parsed.room == "테니스"
+    assert parsed.amount == 6700
+    assert parsed.flow_direction == "outflow"
+    assert parsed.txn_date == "2026-07-03"
+    assert parsed.txn_time is None
+
+
+def test_parse_kakaopay_line_format_amount_without_won_suffix():
+    parsed = parse_kakaopay("이희근 19500 7/3", reference_date=date(2026, 8, 9))
+    assert parsed.room == "이희근"
+    assert parsed.amount == 19500
