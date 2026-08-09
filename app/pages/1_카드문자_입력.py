@@ -30,7 +30,10 @@ raw = st.text_area(
 if st.button("파싱해서 등록", type="primary", disabled=not raw.strip()):
     messages = split_messages(raw)
     if not messages:
-        st.warning("인식된 메시지가 없습니다. [Web발신]으로 시작하는 문자인지 확인해주세요.")
+        st.warning(
+            "인식된 메시지가 없습니다. [Web발신]으로 시작하는 문자이거나, "
+            "가맹점/금액/카드사/할부구분/일시가 줄바꿈으로 구분된 문자인지 확인해주세요."
+        )
     else:
         ok = dup = fail = 0
         for msg in messages:

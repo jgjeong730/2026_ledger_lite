@@ -64,6 +64,34 @@ def test_parse_card_sms_invalid_format_raises():
         parse_card_sms("이것은 카드 승인문자가 아닙니다")
 
 
+LINE_FORMAT_SAMPLE = (
+    "다이소아성산업\n15,000원\n현대카드M\n일시불\n2026.07.01 20:43\n"
+    "\n"
+    "이마트에브리데이수원태장점\n17,170원\n현대카드M\n일시불\n2026.07.01 20:58"
+)
+
+
+def test_split_card_sms_line_format_without_web_tag_yields_two_messages():
+    messages = split_card_sms_messages(LINE_FORMAT_SAMPLE)
+    assert len(messages) == 2
+
+
+def test_parse_card_sms_line_format_without_web_tag():
+    messages = split_card_sms_messages(LINE_FORMAT_SAMPLE)
+    parsed = [parse_card_sms(m) for m in messages]
+
+    assert parsed[0].merchant == "다이소아성산업"
+    assert parsed[0].amount == 15000
+    assert parsed[0].company == "현대카드M"
+    assert parsed[0].installment == "일시불"
+    assert parsed[0].txn_date == "2026-07-01"
+    assert parsed[0].txn_time == "20:43"
+
+    assert parsed[1].merchant == "이마트에브리데이수원태장점"
+    assert parsed[1].amount == 17170
+    assert parsed[1].txn_time == "20:58"
+
+
 def test_split_kakaopay_fixture_yields_two_messages():
     raw = (FIXTURES_DIR / "kakaopay" / "kakaopay_samples.txt").read_text(encoding="utf-8")
     messages = split_kakaopay_messages(raw)

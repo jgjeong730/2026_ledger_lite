@@ -1,10 +1,20 @@
 """카드 승인문자 정규식 파서.
 
-샘플 형식 (tests/fixtures/card_sms/card_sms_samples.txt):
+두 가지 실제 형식을 지원한다:
+
+1) 통신사 [Web발신] 태그가 붙는 한 줄짜리 문자 (일부 카드사/통신사 조합):
     [Web발신] 현대카드M 승인 정*구 100,000원 일시불 08/08 09:48 대신주유소 누적669,523원
 
-카드사마다 표현이 조금씩 다를 수 있지만 "카드사 승인 이름 금액원 할부구분 MM/DD HH:MM 가맹점 누적N원"
-골격은 공통이라고 가정한다. AI 없이 정규식만으로 파싱하며, 가맹점 기반 카테고리 분류는
+2) [Web발신] 태그 없이 항목이 줄바꿈으로 나뉘는 문자 (실사용 중 확인된 실제 형식,
+   연도가 포함되어 있어 기준일 추정이 필요 없다):
+    다이소아성산업
+    15,000원
+    현대카드M
+    일시불
+    2026.07.01 20:43
+
+카드사/통신사마다 표현이 다를 수 있어 두 형식을 순서대로 시도하고, 둘 다 안 맞으면
+CardSmsParseError를 던진다. AI 없이 정규식만으로 파싱하며, 가맹점 기반 카테고리 분류는
 merchant_rules/AI(4단계) 몫이다.
 """
 
@@ -27,6 +37,11 @@ _CARD_SMS_RE = re.compile(
     r"누적(?P<cumulative>[\d,]+)원"
 )
 
+# [Web발신] 태그 없이 "가맹점 / 금액 / 카드사 / 할부구분 / YYYY.MM.DD HH:MM" 5줄로 오는 형식.
+# 각 줄을 그대로 필드로 대응시킨다 (홀더명/누적금액은 이 형식에 없음).
+_AMOUNT_LINE_RE = re.compile(r"^([\d,]+)원$")
+_DATETIME_LINE_RE = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2})$")
+
 
 class CardSmsParseError(ValueError):
     """카드 승인문자 형식을 인식하지 못했을 때 발생."""
@@ -45,25 +60,37 @@ class ParsedCardSms:
 
 
 def split_messages(raw_text: str) -> list[str]:
-    """붙여넣은 텍스트를 [Web발신] 기준으로 개별 메시지 블록으로 분리한다.
+    """붙여넣은 텍스트를 개별 메시지 블록으로 분리한다.
 
-    실제 문자 앱에서 복사하면 메시지 한 건이 여러 줄로 나뉘어 있을 수 있으므로,
-    다음 [Web발신]이 나오기 전까지를 한 블록으로 취급한다. '#'으로 시작하는 주석 줄(픽스처
-    파일의 안내문 등)은 무시한다.
+    [Web발신] 태그가 있으면 그 태그 기준으로 나누고(문자 한 건이 여러 줄에 걸쳐 있을 수
+    있으므로 다음 [Web발신]이 나오기 전까지를 한 블록으로 취급), 태그가 전혀 없으면
+    빈 줄 기준으로 블록을 나눈다 ([Web발신] 태그 없이 항목이 줄바꿈으로만 구분되는 실제
+    카드사 문자 형식용). '#'으로 시작하는 주석 줄(픽스처 파일의 안내문 등)은 무시한다.
     """
     cleaned = "\n".join(
         line for line in raw_text.splitlines() if not line.strip().startswith("#")
     )
-    blocks = [b.strip() for b in _MESSAGE_START_RE.split(cleaned) if b.strip()]
-    return [b for b in blocks if b.startswith("[Web발신]")]
+    if "[Web발신]" in cleaned:
+        blocks = [b.strip() for b in _MESSAGE_START_RE.split(cleaned) if b.strip()]
+        return [b for b in blocks if b.startswith("[Web발신]")]
+
+    blocks = re.split(r"\n\s*\n", cleaned.strip())
+    return [b.strip() for b in blocks if b.strip()]
 
 
 def parse_card_sms(text: str, *, reference_date: Optional[date] = None) -> ParsedCardSms:
-    """카드 승인문자 한 건을 파싱한다. 형식이 다르면 CardSmsParseError."""
+    """카드 승인문자 한 건을 파싱한다. 두 형식을 순서대로 시도하고, 둘 다 안 맞으면 CardSmsParseError."""
+    parsed = _parse_tagged_format(text, reference_date) or _parse_line_format(text)
+    if parsed is None:
+        raise CardSmsParseError(f"카드 승인문자 형식을 인식할 수 없습니다: {text[:80]!r}")
+    return parsed
+
+
+def _parse_tagged_format(text: str, reference_date: Optional[date]) -> Optional[ParsedCardSms]:
     normalized = " ".join(text.split())
     match = _CARD_SMS_RE.search(normalized)
     if not match:
-        raise CardSmsParseError(f"카드 승인문자 형식을 인식할 수 없습니다: {text[:80]!r}")
+        return None
 
     reference_date = reference_date or date.today()
     month, day = (int(p) for p in match.group("date").split("/"))
@@ -81,8 +108,32 @@ def parse_card_sms(text: str, *, reference_date: Optional[date] = None) -> Parse
     )
 
 
+def _parse_line_format(text: str) -> Optional[ParsedCardSms]:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) != 5:
+        return None
+    merchant, amount_line, company, installment, datetime_line = lines
+
+    amount_match = _AMOUNT_LINE_RE.match(amount_line)
+    dt_match = _DATETIME_LINE_RE.match(datetime_line)
+    if not amount_match or not dt_match:
+        return None
+
+    year, month, day, time_str = dt_match.groups()
+    return ParsedCardSms(
+        company=company,
+        holder="",
+        amount=int(amount_match.group(1).replace(",", "")),
+        installment=installment,
+        txn_date=f"{year}-{month}-{day}",
+        txn_time=time_str,
+        merchant=merchant,
+        cumulative_amount=0,
+    )
+
+
 def _resolve_year(reference_date: date, month: int, day: int) -> str:
-    """카드문자에는 연도가 없으므로 기준일(보통 오늘) 근처로 연도를 추정한다.
+    """[Web발신] 태그 형식에는 연도가 없으므로 기준일(보통 오늘) 근처로 연도를 추정한다.
 
     추정 날짜가 기준일보다 180일 넘게 미래이면 작년 거래를 연말에 뒤늦게 입력하는
     경우로 보고 작년으로 보정한다.
