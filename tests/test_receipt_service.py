@@ -183,6 +183,40 @@ def test_summary_counts(db):
     assert counts["needs_review"] == 2
 
 
+def test_update_receipt_changes_editable_fields(db):
+    result = svc.ingest_card_sms(CARD_SMS_1)
+    svc.update_receipt(
+        result["receipt_id"],
+        merchant_name="정정된 가맹점",
+        amount=99000,
+        transaction_date="2026-01-15",
+        memo="오타 수정",
+    )
+
+    receipts = svc.list_receipts()
+    assert receipts[0]["merchant_name"] == "정정된 가맹점"
+    assert receipts[0]["amount"] == 99000
+    assert receipts[0]["transaction_date"] == "2026-01-15"
+    assert receipts[0]["memo"] == "오타 수정"
+
+
+def test_delete_receipt_removes_it_and_allows_reingesting_same_text(db):
+    result = svc.ingest_card_sms(CARD_SMS_1)
+    assert svc.list_receipts() != []
+
+    svc.delete_receipt(result["receipt_id"])
+    assert svc.list_receipts() == []
+
+    # capture/ocr_result도 함께 지워졌어야 같은 원문을 다시 붙여넣었을 때 중복 처리되지 않는다
+    again = svc.ingest_card_sms(CARD_SMS_1)
+    assert again["status"] == "ok"
+    assert len(svc.list_receipts()) == 1
+
+
+def test_delete_receipt_missing_id_is_a_no_op(db):
+    svc.delete_receipt(999999)  # 존재하지 않는 id - 예외 없이 조용히 무시되어야 함
+
+
 def test_list_receipts_for_month_filters_and_orders_by_date(db):
     category_id = get_category_id("income", "수입", "연금인출유입")
     svc.create_manual_entry(

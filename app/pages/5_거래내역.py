@@ -3,6 +3,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.name == "app").parent))
 
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
@@ -10,7 +12,7 @@ from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services.category_service import list_expense_categories, list_income_categories
-from app.services.receipt_service import list_receipts, reclassify_and_learn
+from app.services.receipt_service import delete_receipt, list_receipts, reclassify_and_learn, update_receipt
 
 st.set_page_config(page_title="거래내역 - ledger-lite", page_icon="\U0001F4CB", layout="wide")
 require_login()
@@ -96,3 +98,52 @@ else:
                 )
                 st.success("반영되었습니다.")
                 st.rerun()
+
+            st.divider()
+            st.caption("거래처·금액·날짜·메모가 잘못 들어왔으면 여기서 직접 고치세요.")
+
+            edit_col1, edit_col2 = st.columns(2)
+            with edit_col1:
+                new_merchant = st.text_input(
+                    "거래처", value=r["merchant_name"] or "", key=f"merchant_{r['id']}"
+                )
+                new_amount = st.number_input(
+                    "금액", min_value=0, step=100, value=r["amount"], key=f"amount_{r['id']}"
+                )
+            with edit_col2:
+                new_date = st.date_input(
+                    "날짜", value=date.fromisoformat(r["transaction_date"]), key=f"date_{r['id']}"
+                )
+                new_memo = st.text_input("메모", value=r["memo"] or "", key=f"memo_{r['id']}")
+
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("수정 저장", key=f"save_{r['id']}"):
+                    update_receipt(
+                        r["id"],
+                        merchant_name=new_merchant.strip() or None,
+                        amount=int(new_amount),
+                        transaction_date=new_date.isoformat(),
+                        memo=new_memo.strip() or None,
+                    )
+                    st.success("수정되었습니다.")
+                    st.rerun()
+            with btn_col2:
+                delete_pending_key = f"delete_pending_{r['id']}"
+                if not st.session_state.get(delete_pending_key):
+                    if st.button("\U0001F5D1️ 삭제", key=f"delete_{r['id']}"):
+                        st.session_state[delete_pending_key] = True
+                        st.rerun()
+                else:
+                    st.warning("정말 삭제할까요? 되돌릴 수 없습니다.")
+                    confirm_col1, confirm_col2 = st.columns(2)
+                    with confirm_col1:
+                        if st.button("삭제 확정", key=f"delete_confirm_{r['id']}", type="primary"):
+                            delete_receipt(r["id"])
+                            st.session_state.pop(delete_pending_key, None)
+                            st.success("삭제되었습니다.")
+                            st.rerun()
+                    with confirm_col2:
+                        if st.button("취소", key=f"delete_cancel_{r['id']}"):
+                            st.session_state.pop(delete_pending_key, None)
+                            st.rerun()

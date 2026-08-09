@@ -256,6 +256,54 @@ def reclassify_and_learn(receipt_id: int, category_id: int, merchant_name: str |
         conn.close()
 
 
+def update_receipt(
+    receipt_id: int,
+    *,
+    merchant_name: str | None,
+    amount: int,
+    transaction_date: str,
+    memo: str | None,
+) -> None:
+    """거래내역 화면에서 사용자가 잘못 입력된 거래처/금액/날짜/메모를 직접 고칠 때 사용.
+    원본 capture/ocr_result는 건드리지 않고 receipts만 갱신한다."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE receipts
+            SET merchant_name = ?, amount = ?, transaction_date = ?, memo = ?
+            WHERE id = ?
+            """,
+            (merchant_name, amount, transaction_date, memo, receipt_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_receipt(receipt_id: int) -> None:
+    """거래 1건을 완전히 삭제한다. classifications는 ON DELETE CASCADE로 함께 삭제된다.
+
+    카드문자/카카오페이/영수증처럼 원본 capture가 있는 채널은 capture/ocr_result도 함께
+    지운다 - 그대로 남겨두면 같은 원문을 다시 붙여넣었을 때 중복으로 간주돼 재등록이 막힌다.
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT capture_id, ocr_result_id FROM receipts WHERE id = ?", (receipt_id,)
+        ).fetchone()
+        if row is None:
+            return
+        conn.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
+        if row["ocr_result_id"] is not None:
+            conn.execute("DELETE FROM ocr_results WHERE id = ?", (row["ocr_result_id"],))
+        if row["capture_id"] is not None:
+            conn.execute("DELETE FROM captures WHERE id = ?", (row["capture_id"],))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # ============================================================
 # 채널별 진입점: capture -> ocr_result -> receipt -> classification
 # ============================================================
