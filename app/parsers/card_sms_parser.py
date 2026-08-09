@@ -60,22 +60,27 @@ class ParsedCardSms:
 
 
 def split_messages(raw_text: str) -> list[str]:
-    """붙여넣은 텍스트를 개별 메시지 블록으로 분리한다.
+    """붙여넣은 텍스트를 개별 메시지 블록으로 분리한다. 두 형식이 한 번에 섞여 붙여넣어져도
+    (카드 사용 직후 오는 [Web발신] 문자 + 카드 앱에서 날짜별로 복사한 내역) 모두 처리한다.
 
-    [Web발신] 태그가 있으면 그 태그 기준으로 나누고(문자 한 건이 여러 줄에 걸쳐 있을 수
-    있으므로 다음 [Web발신]이 나오기 전까지를 한 블록으로 취급), 태그가 전혀 없으면
-    빈 줄 기준으로 블록을 나눈다 ([Web발신] 태그 없이 항목이 줄바꿈으로만 구분되는 실제
-    카드사 문자 형식용). '#'으로 시작하는 주석 줄(픽스처 파일의 안내문 등)은 무시한다.
+    먼저 빈 줄 기준으로 문단을 나눈 뒤, 문단별로 [Web발신] 태그가 있으면 그 태그 기준으로
+    다시 나누고(문자 한 건이 여러 줄에 걸쳐 있거나 여러 건이 빈 줄 없이 붙어 있을 수 있으므로),
+    태그가 없는 문단은 그대로 한 블록(줄바꿈으로만 구분되는 카드 앱 형식)으로 취급한다.
+    '#'으로 시작하는 주석 줄(픽스처 파일의 안내문 등)은 무시한다.
     """
     cleaned = "\n".join(
         line for line in raw_text.splitlines() if not line.strip().startswith("#")
     )
-    if "[Web발신]" in cleaned:
-        blocks = [b.strip() for b in _MESSAGE_START_RE.split(cleaned) if b.strip()]
-        return [b for b in blocks if b.startswith("[Web발신]")]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", cleaned.strip()) if p.strip()]
 
-    blocks = re.split(r"\n\s*\n", cleaned.strip())
-    return [b.strip() for b in blocks if b.strip()]
+    blocks: list[str] = []
+    for para in paragraphs:
+        if "[Web발신]" in para:
+            tagged = [b.strip() for b in _MESSAGE_START_RE.split(para) if b.strip()]
+            blocks.extend(b for b in tagged if b.startswith("[Web발신]"))
+        else:
+            blocks.append(para)
+    return blocks
 
 
 def parse_card_sms(text: str, *, reference_date: Optional[date] = None) -> ParsedCardSms:

@@ -92,6 +92,22 @@ def test_parse_card_sms_line_format_without_web_tag():
     assert parsed[1].txn_time == "20:58"
 
 
+def test_split_card_sms_handles_mixed_tagged_and_line_format_in_one_paste():
+    mixed = (
+        "[Web발신] 현대카드M 승인 정*구 100,000원 일시불 08/08 09:48 대신주유소 누적669,523원\n"
+        "\n"
+        "다이소아성산업\n15,000원\n현대카드M\n일시불\n2026.07.01 20:43"
+    )
+    messages = split_card_sms_messages(mixed)
+    assert len(messages) == 2
+
+    parsed = [parse_card_sms(m, reference_date=date(2026, 8, 8)) for m in messages]
+    assert parsed[0].merchant == "대신주유소"
+    assert parsed[0].cumulative_amount == 669523
+    assert parsed[1].merchant == "다이소아성산업"
+    assert parsed[1].txn_date == "2026-07-01"
+
+
 def test_split_kakaopay_fixture_yields_two_messages():
     raw = (FIXTURES_DIR / "kakaopay" / "kakaopay_samples.txt").read_text(encoding="utf-8")
     messages = split_kakaopay_messages(raw)
