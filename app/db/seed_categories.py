@@ -14,7 +14,6 @@ CATEGORY_SEED = [
     ("expense", "고정비", "보험료", 0, 12),
     ("expense", "고정비", "연금성 지출", 0, 13),
     ("expense", "고정비", "구독서비스", 0, 14),
-    ("expense", "고정비", "실손보험", 0, 15),
     # 변동비
     ("expense", "변동비", "식비(외식·배달)", 0, 20),
     ("expense", "변동비", "마트·생필품", 0, 21),
@@ -48,6 +47,7 @@ CATEGORY_SEED = [
     ("income", "수입", "급여", 0, 102),
     ("income", "수입", "아르바이트", 0, 103),
     ("income", "수입", "실업급여", 0, 104),
+    ("income", "수입", "실손보험", 0, 105),
 ]
 
 
@@ -62,6 +62,18 @@ def seed_categories() -> int:
             VALUES (?, ?, ?, ?, ?)
             """,
             CATEGORY_SEED,
+        )
+        conn.commit()
+        # 실손보험은 지출이 아니라 수입 카테고리로 넣었어야 했는데, 잠깐 지출/고정비에
+        # 잘못 추가된 채로 배포된 적이 있다. 이미 그 카테고리로 분류된 거래가 없으면 정리한다.
+        conn.execute(
+            """
+            DELETE FROM categories
+            WHERE entry_type = 'expense' AND major_category = '고정비' AND minor_category = '실손보험'
+              AND id NOT IN (
+                  SELECT category_id FROM classifications WHERE category_id IS NOT NULL
+              )
+            """
         )
         conn.commit()
         return cur.rowcount

@@ -84,7 +84,7 @@ def test_seed_categories_matches_brief(db):
         conn.close()
 
     assert majors == EXPECTED_EXPENSE_MAJORS
-    assert income_minors == {"연금인출유입", "기타수입", "급여", "아르바이트", "실업급여"}
+    assert income_minors == {"연금인출유입", "기타수입", "급여", "아르바이트", "실업급여", "실손보험"}
 
 
 def test_seed_categories_is_idempotent(db):
