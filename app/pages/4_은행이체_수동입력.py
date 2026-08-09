@@ -28,6 +28,12 @@ entry_type_label = st.radio("구분", ["지출", "수입"], horizontal=True)
 expense_categories = list_expense_categories()
 income_categories = list_income_categories()
 
+# 대분류는 폼 밖에 둔다 - st.form 안의 위젯은 "등록" 제출 전까지 재실행을 트리거하지 않아서,
+# 폼 안에 있으면 대분류를 바꿔도 소분류 목록이 즉시 갱신되지 않는다(항상 첫 대분류 기준으로 보임).
+major = None
+if entry_type_label == "지출":
+    major = st.selectbox("대분류", list(expense_categories.keys()))
+
 with st.form("manual_entry_form"):
     col1, col2 = st.columns(2)
     with col1:
@@ -37,7 +43,6 @@ with st.form("manual_entry_form"):
         txn_date = st.date_input("거래일", value=date.today())
 
     if entry_type_label == "지출":
-        major = st.selectbox("대분류", list(expense_categories.keys()))
         minor_options = expense_categories[major]
         minor = st.selectbox("소분류", [m["minor_category"] for m in minor_options])
     else:
