@@ -108,6 +108,49 @@ def test_split_card_sms_handles_mixed_tagged_and_line_format_in_one_paste():
     assert parsed[1].txn_date == "2026-07-01"
 
 
+QUICK_FORMAT_SAMPLE = (
+    "7/1 쿠팡이츠 11000\n"
+    "7/2 쿠팡이츠 24300\n"
+    "7/4 쿠팡 42220\n"
+    "7/5 쿠팡 4980"
+)
+
+
+def test_split_card_sms_quick_format_yields_one_message_per_line():
+    messages = split_card_sms_messages(QUICK_FORMAT_SAMPLE)
+    assert len(messages) == 4
+
+
+def test_parse_card_sms_quick_format():
+    messages = split_card_sms_messages(QUICK_FORMAT_SAMPLE)
+    parsed = [parse_card_sms(m, reference_date=date(2026, 8, 10)) for m in messages]
+
+    assert parsed[0].merchant == "쿠팡이츠"
+    assert parsed[0].amount == 11000
+    assert parsed[0].txn_date == "2026-07-01"
+    assert parsed[0].txn_time is None
+    assert parsed[0].company == ""
+
+    assert parsed[2].merchant == "쿠팡"
+    assert parsed[2].amount == 42220
+
+
+def test_split_card_sms_quick_format_mixed_with_tagged_paragraph():
+    mixed = (
+        "[Web발신] 현대카드M 승인 정*구 100,000원 일시불 08/08 09:48 대신주유소 누적669,523원\n"
+        "\n"
+        "7/1 쿠팡이츠 11000\n"
+        "7/2 쿠팡 42220"
+    )
+    messages = split_card_sms_messages(mixed)
+    assert len(messages) == 3
+
+    parsed = [parse_card_sms(m, reference_date=date(2026, 8, 10)) for m in messages]
+    assert parsed[0].merchant == "대신주유소"
+    assert parsed[1].merchant == "쿠팡이츠"
+    assert parsed[2].merchant == "쿠팡"
+
+
 def test_split_kakaopay_fixture_yields_two_messages():
     raw = (FIXTURES_DIR / "kakaopay" / "kakaopay_samples.txt").read_text(encoding="utf-8")
     messages = split_kakaopay_messages(raw)
