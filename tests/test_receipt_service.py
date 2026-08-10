@@ -232,6 +232,30 @@ def test_delete_receipt_missing_id_is_a_no_op(db):
     svc.delete_receipt(999999)  # 존재하지 않는 id - 예외 없이 조용히 무시되어야 함
 
 
+def test_coupang_eats_merchant_auto_classified_as_delivery(db):
+    text = "쿠팡이츠\n24,300원\nKB국민카드\n일시불\n2026.07.02 19:24"
+    result = svc.ingest_card_sms(text)
+    assert result["status"] == "ok"
+    assert result["classified_by"] == "rule"
+
+    receipts = svc.list_receipts()
+    assert receipts[0]["major_category"] == "변동비"
+    assert receipts[0]["minor_category"] == "식비(배달)"
+
+
+def test_coupang_cupay_merchant_auto_classified_as_mart_not_delivery(db):
+    # "쿠팡(쿠페이)"에도 "쿠팡"이 부분 문자열로 포함되므로, "쿠팡이츠" 규칙이 먼저(priority 10)
+    # 걸리지 않고 "쿠팡" 규칙(priority 50)이 마트·생필품으로 배정하는지 확인한다.
+    text = "쿠팡(쿠페이)\n42,220원\nKB국민카드\n일시불\n2026.07.01 08:30"
+    result = svc.ingest_card_sms(text)
+    assert result["status"] == "ok"
+    assert result["classified_by"] == "rule"
+
+    receipts = svc.list_receipts()
+    assert receipts[0]["major_category"] == "변동비"
+    assert receipts[0]["minor_category"] == "마트·생필품"
+
+
 def test_list_receipts_for_month_filters_and_orders_by_date(db):
     category_id = get_category_id("income", "수입", "연금인출유입")
     svc.create_manual_entry(

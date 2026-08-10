@@ -15,12 +15,13 @@ CATEGORY_SEED = [
     ("expense", "고정비", "연금성 지출", 0, 13),
     ("expense", "고정비", "구독서비스", 0, 14),
     # 변동비
-    ("expense", "변동비", "식비(외식·배달)", 0, 20),
-    ("expense", "변동비", "마트·생필품", 0, 21),
-    ("expense", "변동비", "교통·주유", 0, 22),
-    ("expense", "변동비", "의료·건강", 0, 23),
-    ("expense", "변동비", "미용", 0, 24),
-    ("expense", "변동비", "기타", 0, 25),
+    ("expense", "변동비", "식비(외식)", 0, 20),
+    ("expense", "변동비", "식비(배달)", 0, 21),
+    ("expense", "변동비", "마트·생필품", 0, 22),
+    ("expense", "변동비", "교통·주유", 0, 23),
+    ("expense", "변동비", "의료·건강", 0, 24),
+    ("expense", "변동비", "미용", 0, 25),
+    ("expense", "변동비", "기타", 0, 26),
     # 라이프스타일비
     ("expense", "라이프스타일비", "테니스", 0, 30),
     ("expense", "라이프스타일비", "러닝·트레킹", 0, 31),
@@ -51,6 +52,24 @@ CATEGORY_SEED = [
     ("income", "수입", "실손보험", 0, 105),
 ]
 
+# 기존에 이미 배포되어 sort_order가 재시드로 갱신되지 않는 변동비 소분류들을
+# 식비(외식)/식비(배달) 분리 이후 순서에 맞게 바로잡는다. (idempotent - 매번 같은 값 재설정)
+_VARIABLE_EXPENSE_SORT_ORDER_FIX = [
+    ("마트·생필품", 22),
+    ("교통·주유", 23),
+    ("의료·건강", 24),
+    ("미용", 25),
+    ("기타", 26),
+]
+
+# 카드문자/영수증 가맹점명에 이 패턴이 포함되면 자동으로 배정되는 시스템 규칙.
+# (pattern, match_type, source_type, major_category, minor_category, priority)
+# priority는 낮을수록 먼저 매칭 - "쿠팡이츠"가 "쿠팡"의 부분 문자열이므로 반드시 먼저 확인한다.
+SYSTEM_MERCHANT_RULES = [
+    ("쿠팡이츠", "contains", None, "변동비", "식비(배달)", 10),
+    ("쿠팡", "contains", None, "변동비", "마트·생필품", 50),
+]
+
 
 def seed_categories() -> int:
     """카테고리 시드를 삽입한다. 새로 삽입된 행 수를 반환한다."""
@@ -65,6 +84,7 @@ def seed_categories() -> int:
             CATEGORY_SEED,
         )
         conn.commit()
+
         # 실손보험은 지출이 아니라 수입 카테고리로 넣었어야 했는데, 잠깐 지출/고정비에
         # 잘못 추가된 채로 배포된 적이 있다. 이미 그 카테고리로 분류된 거래가 없으면 정리한다.
         conn.execute(
@@ -76,10 +96,78 @@ def seed_categories() -> int:
               )
             """
         )
+
+        for minor_category, sort_order in _VARIABLE_EXPENSE_SORT_ORDER_FIX:
+            conn.execute(
+                "UPDATE categories SET sort_order = ? "
+                "WHERE entry_type = 'expense' AND major_category = '변동비' AND minor_category = ?",
+                (sort_order, minor_category),
+            )
+
+        _migrate_dining_split(conn)
+        _seed_system_merchant_rules(conn)
+
         conn.commit()
         return cur.rowcount
     finally:
         conn.close()
+
+
+def _migrate_dining_split(conn) -> None:
+    """'식비(외식·배달)'를 '식비(외식)'/'식비(배달)'로 나눈 뒤 실행한 마이그레이션.
+
+    기존에 이미 그 카테고리로 분류돼 있던 거래는 전부 '식비(외식)'으로 옮기고(요청대로),
+    옛 카테고리는 목록에서 사라지도록 is_active=0으로 비활성화한다(삭제하면 과거 참조가 깨짐).
+    """
+    old = conn.execute(
+        """
+        SELECT id FROM categories
+        WHERE entry_type = 'expense' AND major_category = '변동비' AND minor_category = '식비(외식·배달)'
+        """
+    ).fetchone()
+    if old is None:
+        return  # 이미 마이그레이션 완료됨 (재시드해도 다시 실행되지 않음)
+    old_id = old["id"]
+
+    new = conn.execute(
+        """
+        SELECT id FROM categories
+        WHERE entry_type = 'expense' AND major_category = '변동비' AND minor_category = '식비(외식)'
+        """
+    ).fetchone()
+    new_id = new["id"]
+
+    conn.execute(
+        "UPDATE classifications SET category_id = ? WHERE category_id = ? AND is_current = 1",
+        (new_id, old_id),
+    )
+    conn.execute("UPDATE merchant_rules SET category_id = ? WHERE category_id = ?", (new_id, old_id))
+    conn.execute("UPDATE categories SET is_active = 0 WHERE id = ?", (old_id,))
+
+
+def _seed_system_merchant_rules(conn) -> None:
+    for pattern, match_type, source_type, major, minor, priority in SYSTEM_MERCHANT_RULES:
+        category = conn.execute(
+            "SELECT id FROM categories WHERE entry_type = 'expense' AND major_category = ? AND minor_category = ?",
+            (major, minor),
+        ).fetchone()
+        if category is None:
+            continue
+
+        existing = conn.execute(
+            "SELECT id FROM merchant_rules WHERE pattern = ? AND created_by = 'system'",
+            (pattern,),
+        ).fetchone()
+        if existing is not None:
+            continue
+
+        conn.execute(
+            """
+            INSERT INTO merchant_rules (match_type, pattern, source_type, category_id, priority, created_by)
+            VALUES (?, ?, ?, ?, ?, 'system')
+            """,
+            (match_type, pattern, source_type, category["id"], priority),
+        )
 
 
 if __name__ == "__main__":

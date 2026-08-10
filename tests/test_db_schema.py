@@ -241,6 +241,52 @@ def test_only_one_current_classification_per_receipt(db):
         conn.close()
 
 
+def test_dining_category_split_migrates_existing_classifications(db):
+    """식비(외식·배달) 분리 이전에 이미 배포된 DB를 흉내낸다: 옛 카테고리가 있고 그걸로
+    분류된 거래가 있는 상태에서 seed_categories()를 실행하면 식비(외식)으로 옮겨가고,
+    옛 카테고리는 목록에서 사라져야 한다(재삽입/삭제 아님, is_active=0)."""
+    conn = db.get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO categories (entry_type, major_category, minor_category, sort_order) "
+            "VALUES ('expense', '변동비', '식비(외식·배달)', 20)"
+        )
+        old_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+
+        conn.execute(
+            "INSERT INTO receipts (entry_type, source_type, flow_direction, merchant_name, amount, transaction_date) "
+            "VALUES ('expense', 'card_sms', 'outflow', '스타벅스', 5000, '2026-07-01')"
+        )
+        receipt_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO classifications (receipt_id, category_id, classified_by, is_current) VALUES (?, ?, 'default', 1)",
+            (receipt_id, old_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    seed_categories()
+
+    conn = db.get_connection()
+    try:
+        old_row = conn.execute("SELECT is_active FROM categories WHERE id = ?", (old_id,)).fetchone()
+        joined = conn.execute(
+            """
+            SELECT c.major_category, c.minor_category
+            FROM classifications cl JOIN categories c ON c.id = cl.category_id
+            WHERE cl.receipt_id = ? AND cl.is_current = 1
+            """,
+            (receipt_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert old_row["is_active"] == 0
+    assert joined["major_category"] == "변동비"
+    assert joined["minor_category"] == "식비(외식)"
+
+
 def test_invalid_category_fk_rejected(db):
     seed_categories()
     conn = db.get_connection()
