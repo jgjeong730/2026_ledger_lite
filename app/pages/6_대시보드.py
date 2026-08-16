@@ -352,6 +352,34 @@ with col_right:
 st.divider()
 
 # ============================================================
+# 카테고리별 상세 (자체 월 이동, 천원 단위, 중앙정렬, 합계행)
+# 도넛/TOP10 바로 아래에 둬서 위쪽 "분석에서 제외할 대분류" 필터와 한 묶음으로 보이게 한다.
+# ============================================================
+if "dash_detail_month" not in st.session_state:
+    st.session_state.dash_detail_month = today.strftime("%Y-%m")
+
+det_prev, det_title, det_next = st.columns([1, 6, 1])
+if det_prev.button("◀", key="detail_prev_btn"):
+    st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, -1)
+    st.rerun()
+det_title.markdown(f"<h4 style='text-align:center;'>{st.session_state.dash_detail_month} 카테고리별 상세</h4>", unsafe_allow_html=True)
+if det_next.button("▶", key="detail_next_btn"):
+    st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, 1)
+    st.rerun()
+
+filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
+st.caption(f"↑ 위쪽 '분석에서 제외할 대분류'가 이 표에도 적용됩니다 ({filter_note})")
+
+det_start, det_end = _month_bounds(st.session_state.dash_detail_month)
+detail_month_rows = expense_by_category_range(det_start, det_end, exclude_majors=exclude_majors)
+if detail_month_rows:
+    st.markdown(_detail_table_html(detail_month_rows), unsafe_allow_html=True)
+else:
+    st.caption("이 기간에는 지출 내역이 없습니다.")
+
+st.divider()
+
+# ============================================================
 # 날짜별 지출 (캘린더, 자체 월 이동)
 # ============================================================
 if "dash_calendar_month" not in st.session_state:
@@ -369,30 +397,3 @@ if cal_next.button("▶", key="cal_next_btn"):
 cal_start, cal_end = _month_bounds(st.session_state.dash_calendar_month)
 cal_daily = daily_expense_in_range(cal_start, cal_end)
 st.markdown(_calendar_html(st.session_state.dash_calendar_month, cal_daily), unsafe_allow_html=True)
-
-st.divider()
-
-# ============================================================
-# 카테고리별 상세 (자체 월 이동, 천원 단위, 중앙정렬, 합계행)
-# ============================================================
-if "dash_detail_month" not in st.session_state:
-    st.session_state.dash_detail_month = today.strftime("%Y-%m")
-
-det_prev, det_title, det_next = st.columns([1, 6, 1])
-if det_prev.button("◀", key="detail_prev_btn"):
-    st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, -1)
-    st.rerun()
-det_title.markdown(f"<h4 style='text-align:center;'>{st.session_state.dash_detail_month} 카테고리별 상세</h4>", unsafe_allow_html=True)
-if det_next.button("▶", key="detail_next_btn"):
-    st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, 1)
-    st.rerun()
-
-if exclude_majors:
-    st.caption(f"제외된 대분류: {', '.join(exclude_majors)}")
-
-det_start, det_end = _month_bounds(st.session_state.dash_detail_month)
-detail_month_rows = expense_by_category_range(det_start, det_end, exclude_majors=exclude_majors)
-if detail_month_rows:
-    st.markdown(_detail_table_html(detail_month_rows), unsafe_allow_html=True)
-else:
-    st.caption("이 기간에는 지출 내역이 없습니다.")
