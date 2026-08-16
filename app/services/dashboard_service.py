@@ -197,30 +197,36 @@ def range_summary(start: str, end: str) -> dict:
     }
 
 
-def expense_by_major_category_range(start: str, end: str) -> list[dict]:
-    """expense_by_major_category()의 임의 기간 버전."""
+def expense_by_major_category_range(
+    start: str, end: str, exclude_majors: list[str] | None = None
+) -> list[dict]:
+    """expense_by_major_category()의 임의 기간 버전. exclude_majors에 담긴 대분류는 제외한다
+    (예: '비정기 대형지출' 같은 일회성 큰 지출을 트렌드 분석에서 빼고 싶을 때)."""
     conn = get_connection()
     try:
-        rows = conn.execute(
-            """
+        query = """
             SELECT c.major_category AS major_category, SUM(r.amount) AS amount
             FROM receipts r
             JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
             JOIN categories c ON c.id = cl.category_id
             WHERE r.entry_type = 'expense' AND r.flow_direction = 'outflow'
               AND r.transaction_date BETWEEN ? AND ?
-            GROUP BY c.major_category
-            ORDER BY amount DESC
-            """,
-            (start, end),
-        ).fetchall()
+        """
+        params: list = [start, end]
+        if exclude_majors:
+            query += f" AND c.major_category NOT IN ({','.join(['?'] * len(exclude_majors))})"
+            params.extend(exclude_majors)
+        query += " GROUP BY c.major_category ORDER BY amount DESC"
+        rows = conn.execute(query, params).fetchall()
     finally:
         conn.close()
     return [dict(r) for r in rows]
 
 
-def expense_by_category_range(start: str, end: str, limit: int | None = None) -> list[dict]:
-    """expense_by_category()의 임의 기간 버전."""
+def expense_by_category_range(
+    start: str, end: str, limit: int | None = None, exclude_majors: list[str] | None = None
+) -> list[dict]:
+    """expense_by_category()의 임의 기간 버전. exclude_majors는 expense_by_major_category_range()와 동일."""
     conn = get_connection()
     try:
         query = """
@@ -231,10 +237,12 @@ def expense_by_category_range(start: str, end: str, limit: int | None = None) ->
             JOIN categories c ON c.id = cl.category_id
             WHERE r.entry_type = 'expense' AND r.flow_direction = 'outflow'
               AND r.transaction_date BETWEEN ? AND ?
-            GROUP BY c.major_category, c.minor_category
-            ORDER BY amount DESC
         """
         params: list = [start, end]
+        if exclude_majors:
+            query += f" AND c.major_category NOT IN ({','.join(['?'] * len(exclude_majors))})"
+            params.extend(exclude_majors)
+        query += " GROUP BY c.major_category, c.minor_category ORDER BY amount DESC"
         if limit is not None:
             query += " LIMIT ?"
             params.append(limit)
@@ -264,7 +272,7 @@ def daily_expense_in_range(start: str, end: str) -> dict[str, int]:
 
 
 def cumulative_summary(today: date | None = None) -> dict:
-    """오늘 기준 이번 주(월요일부터)/이번 달(1일부터)/올해(1/1부터) 누적 지출."""
+    """오늘 기준 이번 주(월요일부터)/이번 달(1일부터)/올해(1/1부터) 누적 지출·수입·순증감."""
     today = today or date.today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     month_start = today.replace(day=1).isoformat()
@@ -274,23 +282,106 @@ def cumulative_summary(today: date | None = None) -> dict:
     conn = get_connection()
     try:
 
-        def _sum_expense(start: str) -> int:
+        def _sum(entry_type: str, start: str) -> int:
+            flow_clause = "AND flow_direction = 'outflow'" if entry_type == "expense" else ""
             return conn.execute(
-                """
+                f"""
                 SELECT COALESCE(SUM(amount), 0) AS total FROM receipts
-                WHERE entry_type = 'expense' AND flow_direction = 'outflow'
+                WHERE entry_type = ? {flow_clause}
                   AND transaction_date BETWEEN ? AND ?
                 """,
-                (start, today_str),
+                (entry_type, start, today_str),
             ).fetchone()["total"]
 
-        week_expense = _sum_expense(week_start)
-        month_expense = _sum_expense(month_start)
-        year_expense = _sum_expense(year_start)
+        result: dict = {}
+        for label, start in (("week", week_start), ("month", month_start), ("year", year_start)):
+            expense = _sum("expense", start)
+            income = _sum("income", start)
+            result[f"{label}_expense"] = expense
+            result[f"{label}_income"] = income
+            result[f"{label}_net"] = income - expense
     finally:
         conn.close()
 
-    return {"week_expense": week_expense, "month_expense": month_expense, "year_expense": year_expense}
+    return result
+
+
+def monthly_trend_fixed(months_back: int = 6, today: date | None = None) -> list[dict]:
+    """오늘이 속한 달까지 최근 N개월을 고정 캘린더 윈도우로 반환한다 (데이터 없는 달은 0원).
+    monthly_trend()와 달리 "데이터가 있는 달만"이 아니라 항상 정확히 months_back개를 반환한다."""
+    today = today or date.today()
+    months = []
+    y, m = today.year, today.month
+    for i in range(months_back - 1, -1, -1):
+        mm = m - i
+        yy = y
+        while mm <= 0:
+            mm += 12
+            yy -= 1
+        months.append(f"{yy:04d}-{mm:02d}")
+
+    ym = dialect.year_month_expr("transaction_date")
+    placeholders = ",".join(["?"] * len(months))
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT {ym} AS month,
+                   SUM(CASE WHEN entry_type = 'expense' AND flow_direction = 'outflow' THEN amount ELSE 0 END) AS expense,
+                   SUM(CASE WHEN entry_type = 'income' THEN amount ELSE 0 END) AS income
+            FROM receipts
+            WHERE {ym} IN ({placeholders})
+            GROUP BY month
+            """,
+            months,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    by_month = {r["month"]: r for r in rows}
+    return [
+        {
+            "month": m,
+            "expense": by_month[m]["expense"] if m in by_month else 0,
+            "income": by_month[m]["income"] if m in by_month else 0,
+        }
+        for m in months
+    ]
+
+
+def weekly_trend_fixed(weeks_back: int = 12, today: date | None = None) -> list[dict]:
+    """오늘이 속한 주(월요일)까지 최근 N주를 고정 윈도우로 반환한다 (데이터 없는 주는 0원)."""
+    today = today or date.today()
+    this_monday = today - timedelta(days=today.weekday())
+    week_starts = [(this_monday - timedelta(weeks=i)).isoformat() for i in range(weeks_back - 1, -1, -1)]
+
+    week_expr = dialect.week_start_expr("transaction_date")
+    placeholders = ",".join(["?"] * len(week_starts))
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT {week_expr} AS week_start,
+                   SUM(CASE WHEN entry_type = 'expense' AND flow_direction = 'outflow' THEN amount ELSE 0 END) AS expense,
+                   SUM(CASE WHEN entry_type = 'income' THEN amount ELSE 0 END) AS income
+            FROM receipts
+            WHERE {week_expr} IN ({placeholders})
+            GROUP BY week_start
+            """,
+            week_starts,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    by_week = {r["week_start"]: r for r in rows}
+    return [
+        {
+            "week_start": w,
+            "expense": by_week[w]["expense"] if w in by_week else 0,
+            "income": by_week[w]["income"] if w in by_week else 0,
+        }
+        for w in week_starts
+    ]
 
 
 def build_monthly_report_text(month: str) -> str:

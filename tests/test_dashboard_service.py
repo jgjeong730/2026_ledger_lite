@@ -188,3 +188,58 @@ def test_cumulative_summary_with_fixed_today(db):
     assert summary["month_expense"] == 111800
     # 올해(2026-01-01~08-08): 위 + 7월 맛집 2만
     assert summary["year_expense"] == 131800
+    # 수입/순증감도 함께 반환. 수입(150만)은 2026-08-01자라 이번주(8/3~)엔 안 걸리고 이번달/올해엔 걸림
+    assert summary["week_income"] == 0
+    assert summary["week_net"] == -111800
+    assert summary["month_income"] == 1500000
+    assert summary["year_income"] == 1500000
+    assert summary["year_net"] == 1500000 - 131800
+
+
+def test_monthly_trend_fixed_returns_exact_window_zero_filled(db):
+    _seed_sample_data()
+    trend = dash.monthly_trend_fixed(6, today=date(2026, 8, 8))
+    months = [t["month"] for t in trend]
+    assert months == ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]
+
+    by_month = {t["month"]: t for t in trend}
+    assert by_month["2026-03"] == {"month": "2026-03", "expense": 0, "income": 0}
+    assert by_month["2026-07"]["expense"] == 20000
+    assert by_month["2026-08"]["expense"] == 111800
+    assert by_month["2026-08"]["income"] == 1500000
+
+
+def test_monthly_trend_fixed_handles_year_boundary(db):
+    trend = dash.monthly_trend_fixed(6, today=date(2026, 2, 15))
+    months = [t["month"] for t in trend]
+    assert months == ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
+
+
+def test_weekly_trend_fixed_returns_exact_window_zero_filled(db):
+    _seed_sample_data()
+    trend = dash.weekly_trend_fixed(12, today=date(2026, 8, 8))
+    week_starts = [t["week_start"] for t in trend]
+    assert len(week_starts) == 12
+    assert week_starts[-1] == "2026-08-03"  # 오늘(8/8)이 속한 주의 월요일이 마지막 항목
+
+    by_week = {t["week_start"]: t for t in trend}
+    assert by_week["2026-08-03"]["expense"] == 111800
+    # 수입(150만)은 2026-08-01자라 이 주(8/3~9)가 아니라 이전 주(7/27~8/2)에 잡힘
+    assert by_week["2026-08-03"]["income"] == 0
+    assert by_week["2026-07-27"]["income"] == 1500000
+    # 데이터 없는 주는 0으로 채워짐
+    assert by_week[week_starts[0]]["expense"] == 0
+
+
+def test_expense_by_major_category_range_excludes_given_majors(db):
+    _seed_sample_data()
+    rows = dash.expense_by_major_category_range("2026-08-01", "2026-08-31", exclude_majors=["변동비"])
+    majors = {r["major_category"] for r in rows}
+    assert "변동비" not in majors
+    assert majors == {"라이프스타일비", "미분류·확인필요"}
+
+
+def test_expense_by_category_range_excludes_given_majors(db):
+    _seed_sample_data()
+    rows = dash.expense_by_category_range("2026-08-01", "2026-08-31", exclude_majors=["변동비", "미분류·확인필요"])
+    assert {r["major_category"] for r in rows} == {"라이프스타일비"}
