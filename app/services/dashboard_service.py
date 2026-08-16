@@ -306,19 +306,18 @@ def cumulative_summary(today: date | None = None) -> dict:
     return result
 
 
-def monthly_trend_fixed(months_back: int = 6, today: date | None = None) -> list[dict]:
-    """오늘이 속한 달까지 최근 N개월을 고정 캘린더 윈도우로 반환한다 (데이터 없는 달은 0원).
-    monthly_trend()와 달리 "데이터가 있는 달만"이 아니라 항상 정확히 months_back개를 반환한다."""
+def monthly_trend_since(start_month: str, today: date | None = None) -> list[dict]:
+    """start_month('YYYY-MM')부터 오늘이 속한 달까지 매달을 고정 윈도우로 반환한다
+    (데이터 없는 달도 0원으로 채워짐 - monthly_trend()와 달리 "데이터가 있는 달만"이 아니다)."""
     today = today or date.today()
+    y, m = int(start_month[:4]), int(start_month[5:7])
     months = []
-    y, m = today.year, today.month
-    for i in range(months_back - 1, -1, -1):
-        mm = m - i
-        yy = y
-        while mm <= 0:
-            mm += 12
-            yy -= 1
-        months.append(f"{yy:04d}-{mm:02d}")
+    while (y, m) <= (today.year, today.month):
+        months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
 
     ym = dialect.year_month_expr("transaction_date")
     placeholders = ",".join(["?"] * len(months))
@@ -349,11 +348,19 @@ def monthly_trend_fixed(months_back: int = 6, today: date | None = None) -> list
     ]
 
 
-def weekly_trend_fixed(weeks_back: int = 12, today: date | None = None) -> list[dict]:
-    """오늘이 속한 주(월요일)까지 최근 N주를 고정 윈도우로 반환한다 (데이터 없는 주는 0원)."""
+def weekly_trend_since(start_date: str, today: date | None = None) -> list[dict]:
+    """start_date가 속한 주(월요일)부터 오늘이 속한 주까지 매주를 고정 윈도우로 반환한다
+    (데이터 없는 주도 0원으로 채워짐)."""
     today = today or date.today()
+    start = date.fromisoformat(start_date)
+    first_monday = start - timedelta(days=start.weekday())
     this_monday = today - timedelta(days=today.weekday())
-    week_starts = [(this_monday - timedelta(weeks=i)).isoformat() for i in range(weeks_back - 1, -1, -1)]
+
+    week_starts = []
+    w = first_monday
+    while w <= this_monday:
+        week_starts.append(w.isoformat())
+        w += timedelta(weeks=1)
 
     week_expr = dialect.week_start_expr("transaction_date")
     placeholders = ",".join(["?"] * len(week_starts))

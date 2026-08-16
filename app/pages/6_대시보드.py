@@ -18,15 +18,19 @@ from app.services.dashboard_service import (
     daily_expense_in_range,
     expense_by_category_range,
     expense_by_major_category_range,
-    monthly_trend_fixed,
-    range_summary,
-    weekly_trend_fixed,
+    monthly_trend_since,
+    weekly_trend_since,
 )
 
-st.set_page_config(page_title="한눈에 보기 - ledger-lite", page_icon="\U0001F4CA", layout="wide")
+st.set_page_config(page_title="대시보드 - ledger-lite", page_icon="\U0001F4CA", layout="wide")
 require_login()
 init_db()
 seed_categories()
+
+# 실제 거래 기록을 시작한 날짜 - 이전 달/주는 데이터가 없을 걸 알기 때문에 추이 그래프에서
+# 빈 공간으로 채우지 않고 아예 표시 범위에서 제외한다.
+TREND_START_DATE = date(2026, 7, 1)
+TREND_START_MONTH = TREND_START_DATE.strftime("%Y-%m")
 
 # 대분류 고정 배색 (dataviz 스킬 카테고리컬 팔레트, 라이트모드 슬롯 1~5 - 앱 테마가 라이트라서 라이트
 # 서피스 기준 대비를 통과하는 값을 쓴다). categories 시드 순서와 동일하게 항상 같은 대분류가 같은
@@ -75,6 +79,37 @@ def _month_bounds(year_month: str) -> tuple[str, str]:
     y, m = int(year_month[:4]), int(year_month[5:7])
     last_day = pycalendar.monthrange(y, m)[1]
     return f"{year_month}-01", f"{year_month}-{last_day:02d}"
+
+
+def _summary_table_html(cum: dict) -> str:
+    """이번 주/이번 달/올해 x 수입/지출/순증감 요약을 작은 글씨 표로 그린다 (수입이 맨 위)."""
+    periods = [("이번 주", "week"), ("이번 달", "month"), ("올해", "year")]
+    rows = [("수입", "income"), ("지출", "expense"), ("순증감", "net")]
+
+    header_html = f'<th style="text-align:left;padding:8px 10px;font-size:12px;color:{TEXT_FAINT};"></th>'
+    header_html += "".join(
+        f'<th style="text-align:right;padding:8px 10px;font-size:12px;color:{TEXT_FAINT};">{label}</th>'
+        for label, _ in periods
+    )
+
+    body_html = ""
+    for row_label, row_key in rows:
+        cells = (
+            f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};font-weight:600;">{row_label}</td>'
+        )
+        for _, period_key in periods:
+            value = cum[f"{period_key}_{row_key}"]
+            sign = "+" if row_key == "net" and value >= 0 else ""
+            cells += (
+                f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};text-align:right;">'
+                f"{sign}{value:,}원</td>"
+            )
+        body_html += f'<tr style="border-top:1px solid {GRID_COLOR};">{cells}</tr>'
+
+    return (
+        '<table style="width:100%;border-collapse:collapse;">'
+        f"<thead><tr>{header_html}</tr></thead><tbody>{body_html}</tbody></table>"
+    )
 
 
 def _calendar_html(month: str, daily: dict[str, int]) -> str:
@@ -167,7 +202,7 @@ def _detail_table_html(rows: list[dict]) -> str:
     )
 
 
-st.title("\U0001F4CA 한눈에 보기")
+st.title("\U0001F4CA 대시보드")
 
 months = available_months()
 if not months:
@@ -178,34 +213,26 @@ if not months:
     st.stop()
 
 # ============================================================
-# 누적 현황 (오늘 기준 이번 주/이번 달/올해 누적 지출·수입·순증감)
+# 누적 현황 (오늘 기준 이번 주/이번 달/올해 누적 수입·지출·순증감, 표)
 # ============================================================
 cum = cumulative_summary()
-period_cols = st.columns(3)
-for col, (label, key) in zip(
-    period_cols, [("이번 주", "week"), ("이번 달", "month"), ("올해", "year")]
-):
-    with col:
-        st.markdown(f"**{label}**")
-        st.metric("지출", f"{cum[f'{key}_expense']:,}원")
-        st.metric("수입", f"{cum[f'{key}_income']:,}원")
-        st.metric("순증감", f"{cum[f'{key}_net']:+,}원")
+st.markdown(_summary_table_html(cum), unsafe_allow_html=True)
 
 st.divider()
 
 # ============================================================
-# 지출·수입 추이 (주간/월간 막대그래프)
+# 지출·수입 추이 (주간/월간 막대그래프, 2026-07-01부터)
 # ============================================================
 st.subheader("지출·수입 추이")
 trend_mode = st.radio("추이 기간", ["월간", "주간"], horizontal=True, label_visibility="collapsed")
 
 today = date.today()
 if trend_mode == "월간":
-    trend = monthly_trend_fixed(6)
+    trend = monthly_trend_since(TREND_START_MONTH)
     x_labels = [t["month"] for t in trend]
     period_start, period_end = _month_bounds(today.strftime("%Y-%m"))
 else:
-    trend = weekly_trend_fixed(12)
+    trend = weekly_trend_since(TREND_START_DATE.isoformat())
     x_labels = [f"{t['week_start'][5:]}~" for t in trend]
     period_start = (today - timedelta(days=today.weekday())).isoformat()
     period_end = (date.fromisoformat(period_start) + timedelta(days=6)).isoformat()
@@ -237,23 +264,16 @@ fig_trend.update_layout(
 st.plotly_chart(fig_trend, use_container_width=True)
 
 # ============================================================
-# 대분류 제외 필터 (기본: 전체 포함)
+# 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출 비중/TOP10/카테고리별 상세에 적용됨
 # ============================================================
 exclude_majors = st.multiselect(
-    "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 선택)",
+    "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 선택 - "
+    "아래 대분류별 지출 비중·소분류 TOP10·카테고리별 상세에 적용됩니다)",
     options=ALL_MAJOR_OPTIONS,
 )
 
-summary = range_summary(period_start, period_end)
 major_rows = expense_by_major_category_range(period_start, period_end, exclude_majors=exclude_majors)
 detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
-
-period_label = "이번 달" if trend_mode == "월간" else "이번 주"
-col1, col2, col3, col4 = st.columns(4)
-col1.metric(f"{period_label} 지출", f"{summary['expense']:,}원")
-col2.metric(f"{period_label} 수입", f"{summary['income']:,}원")
-col3.metric("순증감", f"{summary['net']:+,}원")
-col4.metric("확인 필요", f"{summary['needs_review']}건")
 
 col_left, col_right = st.columns(2)
 
@@ -366,6 +386,9 @@ det_title.markdown(f"<h4 style='text-align:center;'>{st.session_state.dash_detai
 if det_next.button("▶", key="detail_next_btn"):
     st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, 1)
     st.rerun()
+
+if exclude_majors:
+    st.caption(f"제외된 대분류: {', '.join(exclude_majors)}")
 
 det_start, det_end = _month_bounds(st.session_state.dash_detail_month)
 detail_month_rows = expense_by_category_range(det_start, det_end, exclude_majors=exclude_majors)

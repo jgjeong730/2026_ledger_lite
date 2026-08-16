@@ -196,30 +196,39 @@ def test_cumulative_summary_with_fixed_today(db):
     assert summary["year_net"] == 1500000 - 131800
 
 
-def test_monthly_trend_fixed_returns_exact_window_zero_filled(db):
+def test_monthly_trend_since_returns_fixed_start_window_zero_filled(db):
     _seed_sample_data()
-    trend = dash.monthly_trend_fixed(6, today=date(2026, 8, 8))
+    trend = dash.monthly_trend_since("2026-07", today=date(2026, 8, 8))
     months = [t["month"] for t in trend]
-    assert months == ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]
+    assert months == ["2026-07", "2026-08"]
 
     by_month = {t["month"]: t for t in trend}
-    assert by_month["2026-03"] == {"month": "2026-03", "expense": 0, "income": 0}
     assert by_month["2026-07"]["expense"] == 20000
     assert by_month["2026-08"]["expense"] == 111800
     assert by_month["2026-08"]["income"] == 1500000
 
 
-def test_monthly_trend_fixed_handles_year_boundary(db):
-    trend = dash.monthly_trend_fixed(6, today=date(2026, 2, 15))
-    months = [t["month"] for t in trend]
-    assert months == ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
-
-
-def test_weekly_trend_fixed_returns_exact_window_zero_filled(db):
+def test_monthly_trend_since_zero_fills_gap_month(db):
     _seed_sample_data()
-    trend = dash.weekly_trend_fixed(12, today=date(2026, 8, 8))
+    # 2026-09에는 데이터가 없어도 시작월~오늘 사이 매달이 빠짐없이 나와야 함
+    trend = dash.monthly_trend_since("2026-07", today=date(2026, 9, 15))
+    months = [t["month"] for t in trend]
+    assert months == ["2026-07", "2026-08", "2026-09"]
+    assert {t["month"]: t["expense"] for t in trend}["2026-09"] == 0
+
+
+def test_monthly_trend_since_handles_year_boundary(db):
+    trend = dash.monthly_trend_since("2025-11", today=date(2026, 2, 15))
+    months = [t["month"] for t in trend]
+    assert months == ["2025-11", "2025-12", "2026-01", "2026-02"]
+
+
+def test_weekly_trend_since_returns_fixed_start_window_zero_filled(db):
+    _seed_sample_data()
+    trend = dash.weekly_trend_since("2026-07-01", today=date(2026, 8, 8))
     week_starts = [t["week_start"] for t in trend]
-    assert len(week_starts) == 12
+    # 2026-07-01(수)이 속한 주의 월요일은 2026-06-29
+    assert week_starts[0] == "2026-06-29"
     assert week_starts[-1] == "2026-08-03"  # 오늘(8/8)이 속한 주의 월요일이 마지막 항목
 
     by_week = {t["week_start"]: t for t in trend}
@@ -228,7 +237,7 @@ def test_weekly_trend_fixed_returns_exact_window_zero_filled(db):
     assert by_week["2026-08-03"]["income"] == 0
     assert by_week["2026-07-27"]["income"] == 1500000
     # 데이터 없는 주는 0으로 채워짐
-    assert by_week[week_starts[0]]["expense"] == 0
+    assert by_week["2026-06-29"]["expense"] == 0
 
 
 def test_expense_by_major_category_range_excludes_given_majors(db):
