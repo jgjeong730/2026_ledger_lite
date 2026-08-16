@@ -17,3 +17,7 @@ data/kakao_token.json
 
 .pytest_cache/
 .DS_Store
+
+# 개인 재무 데이터 백업 엑셀 (민감정보, 로컬/Supabase 전용)
+*.xlsx
+~$*.xlsx

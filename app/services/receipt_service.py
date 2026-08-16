@@ -18,6 +18,7 @@ import re
 from dataclasses import asdict
 from datetime import date
 
+from app.db import dialect
 from app.db.connection import get_connection
 from app.parsers.card_sms_parser import CardSmsParseError, parse_card_sms
 from app.parsers.kakaopay_parser import KakaopayParseError, parse_kakaopay
@@ -217,9 +218,9 @@ def learn_rule_from_correction(merchant_name: str, source_type: str, category_id
         ).fetchone()
         if existing:
             conn.execute(
-                """
+                f"""
                 UPDATE merchant_rules
-                SET category_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime')
+                SET category_id = ?, updated_at = {dialect.now_text_expr()}
                 WHERE id = ?
                 """,
                 (category_id, existing["id"]),
@@ -634,14 +635,14 @@ def list_receipts_for_month(month: str) -> list[dict]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT r.id, r.entry_type, r.source_type, r.flow_direction, r.merchant_name, r.amount,
                    r.transaction_date, r.transaction_time, r.memo, r.review_status, r.is_manual_entry,
                    cat.major_category, cat.minor_category, cl.classified_by
             FROM receipts r
             LEFT JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
             LEFT JOIN categories cat ON cat.id = cl.category_id
-            WHERE strftime('%Y-%m', r.transaction_date) = ?
+            WHERE {dialect.year_month_expr('r.transaction_date')} = ?
             ORDER BY r.transaction_date ASC, r.id ASC
             """,
             (month,),
@@ -659,10 +660,10 @@ def summary_counts() -> dict:
             "SELECT COUNT(*) AS n FROM receipts WHERE review_status = 'needs_review'"
         ).fetchone()["n"]
         this_month_expense = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(amount), 0) AS total FROM receipts
             WHERE entry_type = 'expense' AND flow_direction = 'outflow'
-              AND strftime('%Y-%m', transaction_date) = strftime('%Y-%m', 'now', 'localtime')
+              AND {dialect.year_month_expr('transaction_date')} = {dialect.current_year_month_expr()}
             """
         ).fetchone()["total"]
     finally:

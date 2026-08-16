@@ -39,6 +39,7 @@ def db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_ledger.db"
     monkeypatch.setattr(db_connection, "BASE_DIR", tmp_path)
     monkeypatch.setattr(db_connection, "DB_PATH", str(db_file))
+    monkeypatch.setattr(db_connection, "SUPABASE_DB_URL", None)
     db_connection.init_db()
     yield db_connection
     db_connection.get_connection().close()
@@ -84,7 +85,7 @@ def test_seed_categories_matches_brief(db):
         conn.close()
 
     assert majors == EXPECTED_EXPENSE_MAJORS
-    assert income_minors == {"연금인출유입", "기타수입", "급여", "아르바이트", "실업급여", "실손보험"}
+    assert income_minors == {"연금인출유입", "기타수입", "급여", "아르바이트", "실업급여", "실손보험", "모임정산"}
 
 
 def test_seed_categories_is_idempotent(db):

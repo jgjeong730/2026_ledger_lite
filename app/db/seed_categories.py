@@ -14,6 +14,7 @@ CATEGORY_SEED = [
     ("expense", "고정비", "보험료", 0, 12),
     ("expense", "고정비", "연금성 지출", 0, 13),
     ("expense", "고정비", "구독서비스", 0, 14),
+    ("expense", "고정비", "세금", 0, 15),
     # 변동비
     ("expense", "변동비", "식비(외식)", 0, 20),
     ("expense", "변동비", "식비(배달)", 0, 21),
@@ -29,6 +30,8 @@ CATEGORY_SEED = [
     ("expense", "라이프스타일비", "도서·자기계발", 0, 33),
     # 카카오페이 송금(1/N 정산) 기본 배정 카테고리 - source_type='kakaopay'는 이 카테고리로 고정 배정
     ("expense", "라이프스타일비", "소셜/네트워킹", 0, 34),
+    ("expense", "라이프스타일비", "의류·패션", 0, 35),
+    ("expense", "라이프스타일비", "모임정산", 0, 36),
     # 가족·경조사비
     ("expense", "가족·경조사비", "가족모임·외식", 0, 40),
     ("expense", "가족·경조사비", "경조사(축의금·부의금)", 0, 41),
@@ -50,6 +53,7 @@ CATEGORY_SEED = [
     ("income", "수입", "아르바이트", 0, 103),
     ("income", "수입", "실업급여", 0, 104),
     ("income", "수입", "실손보험", 0, 105),
+    ("income", "수입", "모임정산", 0, 106),
 ]
 
 # 기존에 이미 배포되어 sort_order가 재시드로 갱신되지 않는 변동비 소분류들을
@@ -77,9 +81,10 @@ def seed_categories() -> int:
     try:
         cur = conn.executemany(
             """
-            INSERT OR IGNORE INTO categories
+            INSERT INTO categories
                 (entry_type, major_category, minor_category, is_system, sort_order)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (entry_type, major_category, minor_category) DO NOTHING
             """,
             CATEGORY_SEED,
         )

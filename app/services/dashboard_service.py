@@ -5,16 +5,11 @@
 
 from datetime import date, timedelta
 
+from app.db import dialect
 from app.db.connection import get_connection
 
 # categories 시드 순서와 동일 - 대시보드 차트에서 항상 이 순서로 표시/배색한다.
 MAJOR_CATEGORY_ORDER = ["고정비", "변동비", "라이프스타일비", "가족·경조사비", "비정기 대형지출"]
-
-# 해당 날짜가 속한 주의 월요일(YYYY-MM-DD)을 구하는 SQL 표현식.
-# strftime('%w')는 0=일요일..6=토요일이므로, (요일+6)%7 만큼 빼면 그 주의 월요일이 된다.
-_WEEK_START_EXPR = (
-    "date(transaction_date, '-' || ((CAST(strftime('%w', transaction_date) AS INTEGER) + 6) % 7) || ' days')"
-)
 
 
 def available_months() -> list[str]:
@@ -22,8 +17,8 @@ def available_months() -> list[str]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            """
-            SELECT DISTINCT strftime('%Y-%m', transaction_date) AS month
+            f"""
+            SELECT DISTINCT {dialect.year_month_expr('transaction_date')} AS month
             FROM receipts
             ORDER BY month DESC
             """
@@ -34,34 +29,35 @@ def available_months() -> list[str]:
 
 
 def monthly_summary(month: str) -> dict:
+    ym = dialect.year_month_expr("transaction_date")
     conn = get_connection()
     try:
         expense = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(amount), 0) AS total FROM receipts
             WHERE entry_type = 'expense' AND flow_direction = 'outflow'
-              AND strftime('%Y-%m', transaction_date) = ?
+              AND {ym} = ?
             """,
             (month,),
         ).fetchone()["total"]
         income = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(amount), 0) AS total FROM receipts
             WHERE entry_type = 'income'
-              AND strftime('%Y-%m', transaction_date) = ?
+              AND {ym} = ?
             """,
             (month,),
         ).fetchone()["total"]
         needs_review = conn.execute(
-            """
+            f"""
             SELECT COUNT(*) AS n FROM receipts
             WHERE review_status = 'needs_review'
-              AND strftime('%Y-%m', transaction_date) = ?
+              AND {ym} = ?
             """,
             (month,),
         ).fetchone()["n"]
         receipt_count = conn.execute(
-            "SELECT COUNT(*) AS n FROM receipts WHERE strftime('%Y-%m', transaction_date) = ?",
+            f"SELECT COUNT(*) AS n FROM receipts WHERE {ym} = ?",
             (month,),
         ).fetchone()["n"]
     finally:
@@ -77,16 +73,17 @@ def monthly_summary(month: str) -> dict:
 
 def expense_by_major_category(month: str) -> list[dict]:
     """해당 월 대분류별 지출 합계, 금액 내림차순. 지출이 없던 대분류는 포함하지 않는다."""
+    ym = dialect.year_month_expr("r.transaction_date")
     conn = get_connection()
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT c.major_category AS major_category, SUM(r.amount) AS amount
             FROM receipts r
             JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
             JOIN categories c ON c.id = cl.category_id
             WHERE r.entry_type = 'expense' AND r.flow_direction = 'outflow'
-              AND strftime('%Y-%m', r.transaction_date) = ?
+              AND {ym} = ?
             GROUP BY c.major_category
             ORDER BY amount DESC
             """,
@@ -102,14 +99,14 @@ def expense_by_category(month: str, limit: int | None = None) -> list[dict]:
     전체 지출과 합계가 항상 일치하도록 한다 (사용자가 확인이 얼마나 밀려있는지도 한눈에 보이게)."""
     conn = get_connection()
     try:
-        query = """
+        query = f"""
             SELECT c.major_category AS major_category, c.minor_category AS minor_category,
                    SUM(r.amount) AS amount
             FROM receipts r
             JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
             JOIN categories c ON c.id = cl.category_id
             WHERE r.entry_type = 'expense' AND r.flow_direction = 'outflow'
-              AND strftime('%Y-%m', r.transaction_date) = ?
+              AND {dialect.year_month_expr('r.transaction_date')} = ?
             GROUP BY c.major_category, c.minor_category
             ORDER BY amount DESC
         """
@@ -128,8 +125,8 @@ def monthly_trend(months_back: int = 6) -> list[dict]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            """
-            SELECT strftime('%Y-%m', transaction_date) AS month,
+            f"""
+            SELECT {dialect.year_month_expr('transaction_date')} AS month,
                    SUM(CASE WHEN entry_type = 'expense' AND flow_direction = 'outflow' THEN amount ELSE 0 END) AS expense,
                    SUM(CASE WHEN entry_type = 'income' THEN amount ELSE 0 END) AS income
             FROM receipts
@@ -150,7 +147,7 @@ def available_weeks() -> list[str]:
     try:
         rows = conn.execute(
             f"""
-            SELECT DISTINCT {_WEEK_START_EXPR} AS week_start
+            SELECT DISTINCT {dialect.week_start_expr('transaction_date')} AS week_start
             FROM receipts
             ORDER BY week_start DESC
             """

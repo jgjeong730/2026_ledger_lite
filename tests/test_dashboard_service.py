@@ -18,6 +18,7 @@ def db(tmp_path, monkeypatch):
     db_file = tmp_path / "test_ledger.db"
     monkeypatch.setattr(db_connection, "BASE_DIR", tmp_path)
     monkeypatch.setattr(db_connection, "DB_PATH", str(db_file))
+    monkeypatch.setattr(db_connection, "SUPABASE_DB_URL", None)
     db_connection.init_db()
     seed_categories()
     yield db_connection

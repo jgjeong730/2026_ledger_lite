@@ -29,6 +29,10 @@ RECEIPTS_IMAGE_DIR.mkdir(exist_ok=True)
 
 DB_PATH = _get_secret("DB_PATH", str(DATA_DIR / "ledger.db"))
 
+# 설정되면 SQLite 대신 이 Postgres(Supabase)로 연결한다 (배포 환경의 영구 저장소).
+# 비워두면(None) 로컬 SQLite 파일을 사용한다 (로컬 개발/테스트 기본값).
+SUPABASE_DB_URL = _get_secret("SUPABASE_DB_URL")
+
 # 3단계(OCR)/4단계(AI 분류)부터 사용. 키가 없으면 로컬/스텁 모드로 동작해야 한다.
 ANTHROPIC_API_KEY = _get_secret("ANTHROPIC_API_KEY")
 
