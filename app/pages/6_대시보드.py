@@ -1,6 +1,6 @@
 import calendar as pycalendar
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if p.name == "app").parent))
@@ -230,12 +230,9 @@ today = date.today()
 if trend_mode == "월간":
     trend = monthly_trend_since(TREND_START_MONTH)
     x_labels = [t["month"] for t in trend]
-    period_start, period_end = _month_bounds(today.strftime("%Y-%m"))
 else:
     trend = weekly_trend_since(TREND_START_DATE.isoformat())
     x_labels = [f"{t['week_start'][5:]}~" for t in trend]
-    period_start = (today - timedelta(days=today.weekday())).isoformat()
-    period_end = (date.fromisoformat(period_start) + timedelta(days=6)).isoformat()
 
 trend_expense = [t["expense"] for t in trend]
 trend_income = [t["income"] for t in trend]
@@ -279,6 +276,22 @@ exclude_majors = st.pills(
     label_visibility="collapsed",
 ) or []
 
+# 대분류별 지출 비중·TOP10·카테고리별 상세가 함께 참조하는 월 (화살표로 이동)
+if "dash_period_month" not in st.session_state:
+    st.session_state.dash_period_month = today.strftime("%Y-%m")
+
+period_prev, period_title, period_next = st.columns([1, 6, 1])
+if period_prev.button("◀", key="period_prev_btn"):
+    st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, -1)
+    st.rerun()
+period_title.markdown(
+    f"<h4 style='text-align:center;'>{st.session_state.dash_period_month}</h4>", unsafe_allow_html=True
+)
+if period_next.button("▶", key="period_next_btn"):
+    st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, 1)
+    st.rerun()
+
+period_start, period_end = _month_bounds(st.session_state.dash_period_month)
 major_rows = expense_by_major_category_range(period_start, period_end, exclude_majors=exclude_majors)
 detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
 
@@ -359,28 +372,19 @@ with col_right:
 st.divider()
 
 # ============================================================
-# 카테고리별 상세 (자체 월 이동, 천원 단위, 중앙정렬, 합계행)
-# 도넛/TOP10 바로 아래에 둬서 위쪽 "분석에서 제외할 대분류" 필터와 한 묶음으로 보이게 한다.
+# 카테고리별 상세 (천원 단위, 중앙정렬, 합계행)
+# 도넛/TOP10 바로 위의 화살표(dash_period_month)로 같은 월을 함께 이동한다.
 # ============================================================
-if "dash_detail_month" not in st.session_state:
-    st.session_state.dash_detail_month = today.strftime("%Y-%m")
-
-det_prev, det_title, det_next = st.columns([1, 6, 1])
-if det_prev.button("◀", key="detail_prev_btn"):
-    st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, -1)
-    st.rerun()
-det_title.markdown(f"<h4 style='text-align:center;'>{st.session_state.dash_detail_month} 카테고리별 상세</h4>", unsafe_allow_html=True)
-if det_next.button("▶", key="detail_next_btn"):
-    st.session_state.dash_detail_month = _shift_month(st.session_state.dash_detail_month, 1)
-    st.rerun()
+st.markdown(
+    f"<h4 style='text-align:center;'>{st.session_state.dash_period_month} 카테고리별 상세</h4>",
+    unsafe_allow_html=True,
+)
 
 filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
-st.caption(f"↑ 위쪽 '분석에서 제외할 대분류'가 이 표에도 적용됩니다 ({filter_note})")
+st.caption(f"↑ 위쪽 화살표로 월 이동 · '분석에서 제외할 대분류'가 이 표에도 적용됩니다 ({filter_note})")
 
-det_start, det_end = _month_bounds(st.session_state.dash_detail_month)
-detail_month_rows = expense_by_category_range(det_start, det_end, exclude_majors=exclude_majors)
-if detail_month_rows:
-    st.markdown(_detail_table_html(detail_month_rows), unsafe_allow_html=True)
+if detail_rows:
+    st.markdown(_detail_table_html(detail_rows), unsafe_allow_html=True)
 else:
     st.caption("이 기간에는 지출 내역이 없습니다.")
 
