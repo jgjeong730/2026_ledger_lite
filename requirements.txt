@@ -1,4 +1,4 @@
-streamlit>=1.38.0
+streamlit>=1.40.0
 python-dotenv==1.0.1
 
 # 3단계(OCR)/4단계(AI 분류)부터 사용

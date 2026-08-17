@@ -265,12 +265,19 @@ st.plotly_chart(fig_trend, use_container_width=True)
 
 # ============================================================
 # 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출 비중/TOP10/카테고리별 상세에 적용됨
+# 드롭다운 대신 대분류를 가로로 나열한 토글 버튼(선택=제외)으로 표시한다.
 # ============================================================
-exclude_majors = st.multiselect(
-    "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 선택 - "
-    "아래 대분류별 지출 비중·소분류 TOP10·카테고리별 상세에 적용됩니다)",
-    options=ALL_MAJOR_OPTIONS,
+st.caption(
+    "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 클릭 - "
+    "아래 대분류별 지출 비중·소분류 TOP10·카테고리별 상세에 적용됩니다)"
 )
+exclude_majors = st.pills(
+    "분석에서 제외할 대분류",
+    options=ALL_MAJOR_OPTIONS,
+    selection_mode="multi",
+    default=[],
+    label_visibility="collapsed",
+) or []
 
 major_rows = expense_by_major_category_range(period_start, period_end, exclude_majors=exclude_majors)
 detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
