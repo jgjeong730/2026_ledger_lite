@@ -10,9 +10,11 @@ from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.parsers.card_sms_parser import split_messages
 from app.services.receipt_service import ingest_card_sms
+from app.theme import apply_theme
 
 st.set_page_config(page_title="카드문자 입력 - ledger-lite", page_icon="\U0001F4F1")
 require_login()
+apply_theme()
 init_db()
 seed_categories()
 

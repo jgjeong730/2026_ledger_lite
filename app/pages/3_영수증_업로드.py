@@ -13,9 +13,11 @@ from app.services.capture_service import save_receipt_image
 from app.services.category_service import list_expense_categories
 from app.services.receipt_service import ingest_receipt_image_manual, ingest_receipt_image_ocr
 from app.services.vision_service import is_configured
+from app.theme import apply_theme
 
 st.set_page_config(page_title="영수증 업로드 - ledger-lite", page_icon="\U0001F9FE")
 require_login()
+apply_theme()
 init_db()
 seed_categories()
 

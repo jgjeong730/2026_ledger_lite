@@ -19,9 +19,11 @@ from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services import kakao_service
 from app.services.receipt_service import list_receipts, summary_counts
+from app.theme import apply_theme
 
 st.set_page_config(page_title="ledger-lite", page_icon="\U0001F4B0")
 require_login()
+apply_theme()
 
 init_db()
 seed_categories()

@@ -10,9 +10,11 @@ from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services import kakao_service
 from app.services.dashboard_service import available_months, build_monthly_report_text
+from app.theme import apply_theme
 
 st.set_page_config(page_title="카카오 알림 - ledger-lite", page_icon="\U0001F4AC")
 require_login()
+apply_theme()
 init_db()
 seed_categories()
 

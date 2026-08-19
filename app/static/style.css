@@ -1,0 +1,131 @@
+/* ledger-lite 커스텀 테마
+   대시보드(app/pages/6_대시보드.py)의 팔레트와 맞춤:
+   accent #2a78d6, income #1baf7a, text #52514e, grid #e1e0d9, cream #faf6ec */
+
+/* 1) 배경 그라데이션 ------------------------------------------------ */
+.stApp {
+    background: linear-gradient(160deg, #f4f8fc 0%, #faf7f0 45%, #f7f3ea 100%);
+}
+
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #ffffff 0%, #f4f1e8 100%);
+    border-right: 1px solid #e1e0d9;
+}
+
+/* 2) 전체 여백/간격 ------------------------------------------------- */
+.block-container {
+    padding-top: 2.5rem;
+    padding-bottom: 3rem;
+    max-width: 1120px;
+}
+
+div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] {
+    margin-bottom: 0.15rem;
+}
+
+hr {
+    margin: 1.75rem 0;
+}
+
+/* 3) 카드 스타일 ----------------------------------------------------- */
+div[data-testid="stMetric"] {
+    background: #ffffff;
+    border: 1px solid #ecebe4;
+    border-radius: 14px;
+    padding: 1.1rem 1.25rem;
+    box-shadow: 0 2px 10px rgba(82, 81, 78, 0.06);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+div[data-testid="stMetric"]:hover {
+    box-shadow: 0 6px 18px rgba(82, 81, 78, 0.1);
+    transform: translateY(-2px);
+}
+
+div[data-testid="stForm"] {
+    background: #ffffff;
+    border: 1px solid #ecebe4;
+    border-radius: 16px;
+    padding: 1.5rem 1.5rem 0.75rem;
+    box-shadow: 0 2px 12px rgba(82, 81, 78, 0.06);
+}
+
+div[data-testid="stExpander"] {
+    background: #ffffff;
+    border: 1px solid #ecebe4 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 2px 10px rgba(82, 81, 78, 0.05);
+    margin-bottom: 0.6rem;
+    overflow: hidden;
+}
+
+div[data-testid="stExpander"] summary {
+    padding: 0.85rem 1.1rem;
+    transition: background 0.15s ease;
+}
+
+div[data-testid="stExpander"] summary:hover {
+    background: #f7f6f1;
+}
+
+div[data-testid="stDataFrame"], div[data-testid="stTable"] {
+    border: 1px solid #ecebe4;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(82, 81, 78, 0.05);
+}
+
+div[data-testid="stAlert"] {
+    border-radius: 12px;
+}
+
+/* 대시보드 섹션 카드 (app/pages/6_대시보드.py 의 st.container(border=True, key="dash_card_*")) */
+div[class*="st-key-dash_card_"] {
+    background: #ffffff !important;
+    border: 1px solid #ecebe4 !important;
+    border-radius: 16px !important;
+    padding: 1.3rem 1.4rem !important;
+    box-shadow: 0 2px 12px rgba(82, 81, 78, 0.06);
+    margin-bottom: 1.1rem;
+}
+
+/* 4) 버튼 호버 효과 ---------------------------------------------------
+   Streamlit은 버튼 종류별로 kind="secondary"/"primary"/"...FormSubmit" 등을
+   data-testid="stBaseButton-*" 로 렌더링한다. 접두 매칭으로 전부 잡는다. */
+button[data-testid^="stBaseButton-"] {
+    border-radius: 10px !important;
+    border: 1px solid #d8d6cc !important;
+    background: #ffffff !important;
+    color: #52514e !important;
+    font-weight: 600;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 3px rgba(82, 81, 78, 0.05);
+}
+
+button[data-testid^="stBaseButton-"]:hover {
+    border-color: #2a78d6 !important;
+    color: #2a78d6 !important;
+    box-shadow: 0 4px 14px rgba(42, 120, 214, 0.18);
+    transform: translateY(-1px);
+}
+
+button[data-testid^="stBaseButton-"]:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(42, 120, 214, 0.2);
+}
+
+button[kind*="primary"][data-testid^="stBaseButton-"] {
+    background: linear-gradient(135deg, #2a78d6 0%, #1e63b8 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+}
+
+button[kind*="primary"][data-testid^="stBaseButton-"]:hover {
+    box-shadow: 0 6px 18px rgba(42, 120, 214, 0.35);
+    color: #ffffff !important;
+}
+
+/* 타이틀/캡션 여백 살짝 정돈 */
+h1, h2, h3 {
+    letter-spacing: -0.01em;
+}

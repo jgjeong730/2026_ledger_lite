@@ -21,9 +21,11 @@ from app.services.dashboard_service import (
     monthly_trend_since,
     weekly_trend_since,
 )
+from app.theme import apply_theme
 
 st.set_page_config(page_title="대시보드 - ledger-lite", page_icon="\U0001F4CA", layout="wide")
 require_login()
+apply_theme()
 init_db()
 seed_categories()
 
@@ -216,15 +218,17 @@ if not months:
 # 누적 현황 (오늘 기준 이번 주/이번 달/올해 누적 수입·지출·순증감, 표)
 # ============================================================
 cum = cumulative_summary()
-st.markdown(_summary_table_html(cum), unsafe_allow_html=True)
+with st.container(border=True, key="dash_card_summary"):
+    st.markdown(_summary_table_html(cum), unsafe_allow_html=True)
 
 st.divider()
 
 # ============================================================
 # 지출·수입 추이 (주간/월간 막대그래프, 2026-07-01부터)
 # ============================================================
-st.subheader("지출·수입 추이")
-trend_mode = st.radio("추이 기간", ["월간", "주간"], horizontal=True, label_visibility="collapsed")
+trend_card = st.container(border=True, key="dash_card_trend")
+trend_card.subheader("지출·수입 추이")
+trend_mode = trend_card.radio("추이 기간", ["월간", "주간"], horizontal=True, label_visibility="collapsed")
 
 today = date.today()
 if trend_mode == "월간":
@@ -258,116 +262,117 @@ fig_trend.update_layout(
     hovermode="x unified",
     height=340,
 )
-st.plotly_chart(fig_trend, use_container_width=True)
+trend_card.plotly_chart(fig_trend, use_container_width=True)
 
 # ============================================================
 # 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출 비중/TOP10/카테고리별 상세에 적용됨
 # 드롭다운 대신 대분류를 가로로 나열한 토글 버튼(선택=제외)으로 표시한다.
 # ============================================================
-st.caption(
-    "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 클릭 - "
-    "아래 대분류별 지출 비중·소분류 TOP10·카테고리별 상세에 적용됩니다)"
-)
-exclude_majors = st.pills(
-    "분석에서 제외할 대분류",
-    options=ALL_MAJOR_OPTIONS,
-    selection_mode="multi",
-    default=[],
-    label_visibility="collapsed",
-) or []
+with st.container(border=True, key="dash_card_filter"):
+    st.caption(
+        "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 클릭 - "
+        "아래 대분류별 지출 비중·소분류 TOP10·카테고리별 상세에 적용됩니다)"
+    )
+    exclude_majors = st.pills(
+        "분석에서 제외할 대분류",
+        options=ALL_MAJOR_OPTIONS,
+        selection_mode="multi",
+        default=[],
+        label_visibility="collapsed",
+    ) or []
 
-# 대분류별 지출 비중·TOP10·카테고리별 상세가 함께 참조하는 월 (화살표로 이동)
-if "dash_period_month" not in st.session_state:
-    st.session_state.dash_period_month = today.strftime("%Y-%m")
+    # 대분류별 지출 비중·TOP10·카테고리별 상세가 함께 참조하는 월 (화살표로 이동)
+    if "dash_period_month" not in st.session_state:
+        st.session_state.dash_period_month = today.strftime("%Y-%m")
 
-period_prev, period_title, period_next = st.columns([1, 6, 1])
-if period_prev.button("◀", key="period_prev_btn"):
-    st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, -1)
-    st.rerun()
-period_title.markdown(
-    f"<h4 style='text-align:center;'>{st.session_state.dash_period_month}</h4>", unsafe_allow_html=True
-)
-if period_next.button("▶", key="period_next_btn"):
-    st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, 1)
-    st.rerun()
+    period_prev, period_title, period_next = st.columns([1, 6, 1])
+    if period_prev.button("◀", key="period_prev_btn"):
+        st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, -1)
+        st.rerun()
+    period_title.markdown(
+        f"<h4 style='text-align:center;'>{st.session_state.dash_period_month}</h4>", unsafe_allow_html=True
+    )
+    if period_next.button("▶", key="period_next_btn"):
+        st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, 1)
+        st.rerun()
 
-period_start, period_end = _month_bounds(st.session_state.dash_period_month)
-major_rows = expense_by_major_category_range(period_start, period_end, exclude_majors=exclude_majors)
-detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
+    period_start, period_end = _month_bounds(st.session_state.dash_period_month)
+    major_rows = expense_by_major_category_range(period_start, period_end, exclude_majors=exclude_majors)
+    detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
 
-col_left, col_right = st.columns(2)
+    col_left, col_right = st.columns(2)
 
-with col_left:
-    st.subheader("대분류별 지출 비중")
-    if not major_rows:
-        st.caption("이 기간에는 지출 내역이 없습니다.")
-    else:
-        majors = [r["major_category"] for r in major_rows]
-        amounts = [r["amount"] for r in major_rows]
-        total_expense = sum(amounts)
-        fig_donut = go.Figure(
-            go.Pie(
-                labels=majors,
-                values=amounts,
-                hole=0.62,
-                sort=False,
-                marker=dict(
-                    colors=[MAJOR_CATEGORY_COLORS.get(m, EXPENSE_COLOR) for m in majors],
-                    line=dict(color="#ffffff", width=2),
-                ),
-                textinfo="percent",
-                textfont=dict(size=12, color="#ffffff"),
-                hovertemplate="%{label} %{value:,.0f}원 (%{percent})<extra></extra>",
-            )
-        )
-        fig_donut.update_layout(
-            **CHART_LAYOUT_DEFAULTS,
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="top", y=-0.05, font=dict(size=11)),
-            height=300,
-            annotations=[
-                dict(
-                    text=f"{total_expense:,.0f}<br>원",
-                    x=0.5,
-                    y=0.5,
-                    showarrow=False,
-                    font=dict(size=15, color=TEXT_COLOR),
+    with col_left:
+        st.subheader("대분류별 지출 비중")
+        if not major_rows:
+            st.caption("이 기간에는 지출 내역이 없습니다.")
+        else:
+            majors = [r["major_category"] for r in major_rows]
+            amounts = [r["amount"] for r in major_rows]
+            total_expense = sum(amounts)
+            fig_donut = go.Figure(
+                go.Pie(
+                    labels=majors,
+                    values=amounts,
+                    hole=0.62,
+                    sort=False,
+                    marker=dict(
+                        colors=[MAJOR_CATEGORY_COLORS.get(m, EXPENSE_COLOR) for m in majors],
+                        line=dict(color="#ffffff", width=2),
+                    ),
+                    textinfo="percent",
+                    textfont=dict(size=12, color="#ffffff"),
+                    hovertemplate="%{label} %{value:,.0f}원 (%{percent})<extra></extra>",
                 )
-            ],
-        )
-        st.plotly_chart(fig_donut, use_container_width=True)
-
-with col_right:
-    st.subheader("소분류 지출 TOP 10")
-    top10 = detail_rows[:10]
-    if not top10:
-        st.caption("이 기간에는 지출 내역이 없습니다.")
-    else:
-        labels = [
-            r["major_category"] if not r["minor_category"] else f"{r['major_category']}>{r['minor_category']}"
-            for r in top10
-        ]
-        amounts = [r["amount"] for r in top10]
-        fig_minor = go.Figure(
-            go.Bar(
-                x=amounts,
-                y=labels,
-                orientation="h",
-                marker_color=EXPENSE_COLOR,
-                text=[f"{a:,.0f}원" for a in amounts],
-                textposition="outside",
-                hovertemplate="%{y} %{x:,.0f}원<extra></extra>",
             )
-        )
-        fig_minor.update_layout(
-            **CHART_LAYOUT_DEFAULTS,
-            xaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False),
-            yaxis=dict(autorange="reversed", gridcolor="rgba(0,0,0,0)"),
-            showlegend=False,
-            bargap=0.35,
-            height=300,
-        )
-        st.plotly_chart(fig_minor, use_container_width=True)
+            fig_donut.update_layout(
+                **CHART_LAYOUT_DEFAULTS,
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="top", y=-0.05, font=dict(size=11)),
+                height=300,
+                annotations=[
+                    dict(
+                        text=f"{total_expense:,.0f}<br>원",
+                        x=0.5,
+                        y=0.5,
+                        showarrow=False,
+                        font=dict(size=15, color=TEXT_COLOR),
+                    )
+                ],
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+    with col_right:
+        st.subheader("소분류 지출 TOP 10")
+        top10 = detail_rows[:10]
+        if not top10:
+            st.caption("이 기간에는 지출 내역이 없습니다.")
+        else:
+            labels = [
+                r["major_category"] if not r["minor_category"] else f"{r['major_category']}>{r['minor_category']}"
+                for r in top10
+            ]
+            amounts = [r["amount"] for r in top10]
+            fig_minor = go.Figure(
+                go.Bar(
+                    x=amounts,
+                    y=labels,
+                    orientation="h",
+                    marker_color=EXPENSE_COLOR,
+                    text=[f"{a:,.0f}원" for a in amounts],
+                    textposition="outside",
+                    hovertemplate="%{y} %{x:,.0f}원<extra></extra>",
+                )
+            )
+            fig_minor.update_layout(
+                **CHART_LAYOUT_DEFAULTS,
+                xaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False),
+                yaxis=dict(autorange="reversed", gridcolor="rgba(0,0,0,0)"),
+                showlegend=False,
+                bargap=0.35,
+                height=300,
+            )
+            st.plotly_chart(fig_minor, use_container_width=True)
 
 st.divider()
 
@@ -375,18 +380,19 @@ st.divider()
 # 카테고리별 상세 (천원 단위, 중앙정렬, 합계행)
 # 도넛/TOP10 바로 위의 화살표(dash_period_month)로 같은 월을 함께 이동한다.
 # ============================================================
-st.markdown(
-    f"<h4 style='text-align:center;'>{st.session_state.dash_period_month} 카테고리별 상세</h4>",
-    unsafe_allow_html=True,
-)
+with st.container(border=True, key="dash_card_detail"):
+    st.markdown(
+        f"<h4 style='text-align:center;'>{st.session_state.dash_period_month} 카테고리별 상세</h4>",
+        unsafe_allow_html=True,
+    )
 
-filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
-st.caption(f"↑ 위쪽 화살표로 월 이동 · '분석에서 제외할 대분류'가 이 표에도 적용됩니다 ({filter_note})")
+    filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
+    st.caption(f"↑ 위쪽 화살표로 월 이동 · '분석에서 제외할 대분류'가 이 표에도 적용됩니다 ({filter_note})")
 
-if detail_rows:
-    st.markdown(_detail_table_html(detail_rows), unsafe_allow_html=True)
-else:
-    st.caption("이 기간에는 지출 내역이 없습니다.")
+    if detail_rows:
+        st.markdown(_detail_table_html(detail_rows), unsafe_allow_html=True)
+    else:
+        st.caption("이 기간에는 지출 내역이 없습니다.")
 
 st.divider()
 
@@ -396,15 +402,19 @@ st.divider()
 if "dash_calendar_month" not in st.session_state:
     st.session_state.dash_calendar_month = today.strftime("%Y-%m")
 
-cal_prev, cal_title, cal_next = st.columns([1, 6, 1])
-if cal_prev.button("◀", key="cal_prev_btn"):
-    st.session_state.dash_calendar_month = _shift_month(st.session_state.dash_calendar_month, -1)
-    st.rerun()
-cal_title.markdown(f"<h4 style='text-align:center;'>{st.session_state.dash_calendar_month} 날짜별 지출</h4>", unsafe_allow_html=True)
-if cal_next.button("▶", key="cal_next_btn"):
-    st.session_state.dash_calendar_month = _shift_month(st.session_state.dash_calendar_month, 1)
-    st.rerun()
+with st.container(border=True, key="dash_card_calendar"):
+    cal_prev, cal_title, cal_next = st.columns([1, 6, 1])
+    if cal_prev.button("◀", key="cal_prev_btn"):
+        st.session_state.dash_calendar_month = _shift_month(st.session_state.dash_calendar_month, -1)
+        st.rerun()
+    cal_title.markdown(
+        f"<h4 style='text-align:center;'>{st.session_state.dash_calendar_month} 날짜별 지출</h4>",
+        unsafe_allow_html=True,
+    )
+    if cal_next.button("▶", key="cal_next_btn"):
+        st.session_state.dash_calendar_month = _shift_month(st.session_state.dash_calendar_month, 1)
+        st.rerun()
 
-cal_start, cal_end = _month_bounds(st.session_state.dash_calendar_month)
-cal_daily = daily_expense_in_range(cal_start, cal_end)
-st.markdown(_calendar_html(st.session_state.dash_calendar_month, cal_daily), unsafe_allow_html=True)
+    cal_start, cal_end = _month_bounds(st.session_state.dash_calendar_month)
+    cal_daily = daily_expense_in_range(cal_start, cal_end)
+    st.markdown(_calendar_html(st.session_state.dash_calendar_month, cal_daily), unsafe_allow_html=True)

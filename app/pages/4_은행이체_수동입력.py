@@ -11,9 +11,11 @@ from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services.category_service import list_expense_categories, list_income_categories
 from app.services.receipt_service import create_manual_entry
+from app.theme import apply_theme
 
 st.set_page_config(page_title="은행이체 수동입력 - ledger-lite", page_icon="\U0001F3E6")
 require_login()
+apply_theme()
 init_db()
 seed_categories()
 
