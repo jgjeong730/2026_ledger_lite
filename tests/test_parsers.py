@@ -64,6 +64,22 @@ def test_parse_card_sms_invalid_format_raises():
         parse_card_sms("이것은 카드 승인문자가 아닙니다")
 
 
+def test_parse_card_sms_tagged_format_company_name_with_space():
+    # 카드사명이 "현대카드M"이 아니라 "현대 M"처럼 공백을 포함해 오는 경우도 인식해야 한다.
+    text = (
+        "[Web발신]\n현대 M 승인\n정*구\n33,500원 일시불\n08/19 17:11\n"
+        "에스엠씨라켓스트링연구\n누적1,392,821원"
+    )
+    parsed = parse_card_sms(text, reference_date=date(2026, 8, 20))
+    assert parsed.company == "현대 M"
+    assert parsed.merchant == "에스엠씨라켓스트링연구"
+    assert parsed.amount == 33500
+    assert parsed.installment == "일시불"
+    assert parsed.txn_date == "2026-08-19"
+    assert parsed.txn_time == "17:11"
+    assert parsed.cumulative_amount == 1392821
+
+
 LINE_FORMAT_SAMPLE = (
     "다이소아성산업\n15,000원\n현대카드M\n일시불\n2026.07.01 20:43\n"
     "\n"

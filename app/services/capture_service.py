@@ -8,11 +8,14 @@ from app.db.connection import get_connection
 
 
 def find_existing_text_capture(source_type: str, raw_text: str) -> int | None:
-    """동일 원문이 이미 입력되어 있는지 확인한다 (중복 붙여넣기 방지)."""
+    """동일 원문이 이미 입력되어 있는지 확인한다 (중복 붙여넣기 방지).
+
+    이전에 파싱 실패(status='failed')했던 캡처는 제외한다 - 그렇지 않으면 파서를
+    고친 뒤 같은 원문을 다시 붙여넣어도 "중복"으로 오인해 재시도가 막힌다."""
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id FROM captures WHERE source_type = ? AND raw_text = ?",
+            "SELECT id FROM captures WHERE source_type = ? AND raw_text = ? AND status != 'failed'",
             (source_type, raw_text),
         ).fetchone()
     finally:

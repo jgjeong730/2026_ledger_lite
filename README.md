@@ -202,6 +202,7 @@ PROJECT_BRIEF 3절의 배포 계획: "우선 로컬 실행 → 안정화 후 Str
 3. 앱 설정(Settings) → **Secrets**에 아래 내용을 TOML 형식으로 붙여넣기 (`.env`가 아니라 Streamlit
    Cloud 고유의 시크릿 관리 방식이라 `app/config.py`가 `st.secrets`도 함께 읽도록 되어 있다):
    ```toml
+   SUPABASE_DB_URL = "postgresql://postgres.<project-ref>:<password>@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres"
    ANTHROPIC_API_KEY = "..."
    KAKAO_REST_API_KEY = "..."
    KAKAO_CLIENT_SECRET = "..."
@@ -212,11 +213,11 @@ PROJECT_BRIEF 3절의 배포 계획: "우선 로컬 실행 → 안정화 후 Str
    개발용으로 남겨둬도 된다). 위 Secrets의 `KAKAO_REDIRECT_URI`도 이 URL로 맞춘다.
 5. Secrets 저장 후 앱 재부팅(Reboot)
 
-**⚠️ 알려진 한계 — 데이터 영속성**: 이 앱은 `data/ledger.db`(로컬 SQLite 파일)에 데이터를 저장한다.
-Streamlit Community Cloud의 파일시스템은 컨테이너가 재시작되거나 재배포될 때 초기화될 수 있어,
-그 시점에 지금까지 입력한 가계부 데이터가 사라질 수 있다. 무료 배포로 빠르게 폰에서 써보는
-용도로는 괜찮지만, 데이터를 안정적으로 보존하려면 Supabase 등 외부 DB로 전환이 필요하다
-(브리프에도 이 가능성이 언급되어 있음 — 현재는 로컬 SQLite 그대로 유지).
+**⚠️ 데이터 영속성 — `SUPABASE_DB_URL`을 반드시 설정할 것**: Streamlit Community Cloud의
+파일시스템은 컨테이너가 재시작되거나 재배포될 때(예: git push로 인한 자동 재배포) 초기화된다.
+Secrets에 `SUPABASE_DB_URL`이 없으면 앱이 로컬 SQLite(`data/ledger.db`)로 조용히 폴백하는데,
+이 경우 그 시점까지 입력한 가계부 데이터가 다음 재배포 때 통째로 사라진다. `SUPABASE_DB_URL`을
+설정해두면 데이터가 Supabase Postgres에 저장되어 재배포와 무관하게 보존된다.
 
 ## 테스트
 

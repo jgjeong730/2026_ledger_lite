@@ -32,7 +32,7 @@ _MESSAGE_START_RE = re.compile(r"(?=\[Web발신\])")
 
 _CARD_SMS_RE = re.compile(
     r"\[Web발신\]\s*"
-    r"(?P<company>\S+)\s+승인\s+"
+    r"(?P<company>.+?)\s+승인\s+"
     r"(?P<holder>\S+)\s+"
     r"(?P<amount>[\d,]+)원\s+"
     r"(?P<installment>\S+)\s+"
