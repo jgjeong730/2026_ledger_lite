@@ -55,7 +55,17 @@ else:
         }
         for r in receipts
     ]
-    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+    df = pd.DataFrame(table_rows)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.subheader("\U0001F4CA 카테고리별 합계")
+    summary_df = (
+        df.groupby(["구분", "카테고리"], as_index=False)["금액"]
+        .sum()
+        .sort_values(["구분", "금액"], ascending=[True, False])
+        .reset_index(drop=True)
+    )
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
     st.divider()
     st.caption("아래에서 거래를 펼쳐 카테고리를 수정하면 같은 가맹점의 다음 문자에 자동 반영됩니다.")
