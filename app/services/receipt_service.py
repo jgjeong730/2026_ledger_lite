@@ -602,7 +602,13 @@ def create_manual_entry(
 # ============================================================
 
 
-def list_receipts(*, limit: int = 300, review_status: str | None = None, entry_type: str | None = None) -> list[dict]:
+def list_receipts(
+    *,
+    limit: int = 300,
+    review_status: str | None = None,
+    entry_type: str | None = None,
+    month: str | None = None,
+) -> list[dict]:
     query = """
         SELECT r.id, r.entry_type, r.source_type, r.flow_direction, r.merchant_name, r.amount,
                r.transaction_date, r.transaction_time, r.memo, r.review_status, r.is_manual_entry,
@@ -619,6 +625,9 @@ def list_receipts(*, limit: int = 300, review_status: str | None = None, entry_t
     if entry_type:
         query += " AND r.entry_type = ?"
         params.append(entry_type)
+    if month:
+        query += f" AND {dialect.year_month_expr('r.transaction_date')} = ?"
+        params.append(month)
     query += " ORDER BY r.transaction_date DESC, r.id DESC LIMIT ?"
     params.append(limit)
 

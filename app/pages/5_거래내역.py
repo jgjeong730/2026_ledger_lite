@@ -12,6 +12,7 @@ from app.auth import require_login
 from app.db.connection import init_db
 from app.db.seed_categories import seed_categories
 from app.services.category_service import list_expense_categories, list_income_categories
+from app.services.dashboard_service import available_months
 from app.services.receipt_service import delete_receipt, list_receipts, reclassify_and_learn, update_receipt
 from app.theme import apply_theme
 
@@ -23,16 +24,19 @@ seed_categories()
 
 st.title("\U0001F4CB 거래내역 확인 / 재분류")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
     status_label = st.selectbox("상태", ["전체", "확인 필요", "확인 완료"])
 with col2:
     type_label = st.selectbox("구분", ["전체", "지출", "수입"])
+with col3:
+    month_label = st.selectbox("월", ["전체"] + available_months())
 
 review_status = {"확인 필요": "needs_review", "확인 완료": "confirmed"}.get(status_label)
 entry_type = {"지출": "expense", "수입": "income"}.get(type_label)
+month = None if month_label == "전체" else month_label
 
-receipts = list_receipts(review_status=review_status, entry_type=entry_type)
+receipts = list_receipts(review_status=review_status, entry_type=entry_type, month=month)
 
 if not receipts:
     st.info("표시할 거래가 없습니다.")
