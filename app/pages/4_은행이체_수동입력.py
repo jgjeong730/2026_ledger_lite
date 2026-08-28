@@ -30,11 +30,18 @@ entry_type_label = st.radio("구분", ["지출", "수입"], horizontal=True)
 expense_categories = list_expense_categories()
 income_categories = list_income_categories()
 
-# 대분류는 폼 밖에 둔다 - st.form 안의 위젯은 "등록" 제출 전까지 재실행을 트리거하지 않아서,
+# 대분류/소분류는 폼 밖에 둔다 - st.form 안의 위젯은 "등록" 제출 전까지 재실행을 트리거하지 않아서,
 # 폼 안에 있으면 대분류를 바꿔도 소분류 목록이 즉시 갱신되지 않는다(항상 첫 대분류 기준으로 보임).
 major = None
+minor = None
 if entry_type_label == "지출":
-    major = st.selectbox("대분류", list(expense_categories.keys()))
+    with st.container(border=True):
+        col_major, col_minor = st.columns(2)
+        with col_major:
+            major = st.selectbox("대분류", list(expense_categories.keys()))
+        with col_minor:
+            minor_options = expense_categories[major]
+            minor = st.selectbox("소분류", [m["minor_category"] for m in minor_options])
 
 with st.form("manual_entry_form"):
     col1, col2 = st.columns(2)
@@ -44,10 +51,7 @@ with st.form("manual_entry_form"):
     with col2:
         txn_date = st.date_input("거래일", value=date.today())
 
-    if entry_type_label == "지출":
-        minor_options = expense_categories[major]
-        minor = st.selectbox("소분류", [m["minor_category"] for m in minor_options])
-    else:
+    if entry_type_label == "수입":
         minor = st.selectbox("수입 종류", [c["minor_category"] for c in income_categories])
 
     memo = st.text_input("메모(선택)")
