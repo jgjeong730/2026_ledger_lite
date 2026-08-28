@@ -27,8 +27,6 @@ st.caption(
     "여러 건을 아래에 계속 추가한 뒤 맨 아래 '전체 등록'으로 한 번에 저장하세요."
 )
 
-entry_type_label = st.radio("구분", ["지출", "수입"], horizontal=True)
-
 expense_categories = list_expense_categories()
 income_categories = list_income_categories()
 
@@ -50,9 +48,13 @@ rows_data = []
 
 for idx, rid in enumerate(st.session_state.manual_row_ids):
     with st.container(border=True):
-        header_col, remove_col = st.columns([8, 1])
+        header_col, type_col, remove_col = st.columns([2, 3, 1])
         with header_col:
             st.markdown(f"**#{idx + 1}**")
+        with type_col:
+            row_type = st.radio(
+                "구분", ["지출", "수입"], key=f"type_{rid}", horizontal=True, label_visibility="collapsed"
+            )
         with remove_col:
             if len(st.session_state.manual_row_ids) > 1:
                 st.button("삭제", key=f"remove_{rid}", on_click=_remove_row, args=(rid,))
@@ -61,14 +63,14 @@ for idx, rid in enumerate(st.session_state.manual_row_ids):
         major_val = None
         minor_val = None
         with col_major:
-            if entry_type_label == "지출":
+            if row_type == "지출":
                 major_val = st.selectbox("대분류", list(expense_categories.keys()), key=f"major_{rid}")
             else:
                 minor_val = st.selectbox(
                     "수입 종류", [c["minor_category"] for c in income_categories], key=f"minor_{rid}"
                 )
         with col_minor:
-            if entry_type_label == "지출":
+            if row_type == "지출":
                 minor_options = expense_categories[major_val]
                 minor_val = st.selectbox(
                     "소분류", [m["minor_category"] for m in minor_options], key=f"minor_{rid}"
@@ -86,6 +88,7 @@ for idx, rid in enumerate(st.session_state.manual_row_ids):
 
     rows_data.append(
         {
+            "entry_type_label": row_type,
             "merchant": merchant,
             "amount": amount,
             "txn_date": txn_date,
@@ -102,7 +105,7 @@ if st.button("전체 등록", type="primary"):
     for row in rows_data:
         if row["amount"] <= 0:
             continue
-        if entry_type_label == "지출":
+        if row["entry_type_label"] == "지출":
             minor_options = expense_categories[row["major"]]
             category_id = next(m["id"] for m in minor_options if m["minor_category"] == row["minor"])
             create_manual_entry(
@@ -130,7 +133,9 @@ if st.button("전체 등록", type="primary"):
     else:
         st.success(f"{inserted}건 등록 완료")
         for key in list(st.session_state.keys()):
-            if key.startswith(("major_", "minor_", "date_", "merchant_", "amount_", "memo_", "remove_")):
+            if key.startswith(
+                ("type_", "major_", "minor_", "date_", "merchant_", "amount_", "memo_", "remove_")
+            ):
                 del st.session_state[key]
         st.session_state.manual_row_ids = [str(uuid4())]
         st.rerun()
