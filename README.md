@@ -6,7 +6,8 @@
 
 연금(IRP/연저)·투자 관련 데이터/분석은 명시적으로 제외한다 (별도 프로젝트에서 관리). 연금 인출액이
 입금되는 경우 "출처 분석 없이 금액만 수입으로 기록"하는 정도로만 취급한다. 자세한 배경은
-[docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) 참고.
+[docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) 참고. 개발 루프·커밋/배포 관례는
+[docs/WORKFLOW.md](docs/WORKFLOW.md) 참고.
 
 ## 프로젝트 한눈에 보기
 
