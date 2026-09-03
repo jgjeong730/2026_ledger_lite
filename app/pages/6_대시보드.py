@@ -62,18 +62,6 @@ CHART_LAYOUT_DEFAULTS = dict(
 ALL_MAJOR_OPTIONS = [*MAJOR_CATEGORY_ORDER, "미분류·확인필요"]
 
 
-def _shift_month(year_month: str, delta: int) -> str:
-    y, m = int(year_month[:4]), int(year_month[5:7])
-    m += delta
-    while m > 12:
-        m -= 12
-        y += 1
-    while m < 1:
-        m += 12
-        y -= 1
-    return f"{y:04d}-{m:02d}"
-
-
 def _month_bounds(year_month: str) -> tuple[str, str]:
     y, m = int(year_month[:4]), int(year_month[5:7])
     last_day = pycalendar.monthrange(y, m)[1]
@@ -494,24 +482,47 @@ with st.container(border=True, key="dash_card_detail"):
 st.divider()
 
 # ============================================================
-# 날짜별 지출 (캘린더, 자체 월 이동)
+# 날짜별 지출 (캘린더) - 카테고리별 상세와 같은 연도·월 드롭다운 방식
 # ============================================================
-if "dash_calendar_month" not in st.session_state:
-    st.session_state.dash_calendar_month = today.strftime("%Y-%m")
-
 with st.container(border=True, key="dash_card_calendar"):
-    cal_prev, cal_title, cal_next = st.columns([1, 6, 1])
-    if cal_prev.button("◀", key="cal_prev_btn"):
-        st.session_state.dash_calendar_month = _shift_month(st.session_state.dash_calendar_month, -1)
-        st.rerun()
-    cal_title.markdown(
-        f"<h4 style='text-align:center;'>{st.session_state.dash_calendar_month} 날짜별 지출</h4>",
-        unsafe_allow_html=True,
-    )
-    if cal_next.button("▶", key="cal_next_btn"):
-        st.session_state.dash_calendar_month = _shift_month(st.session_state.dash_calendar_month, 1)
-        st.rerun()
+    if "dash_calendar_year" not in st.session_state:
+        st.session_state.dash_calendar_year = today.year
+    if "dash_calendar_month" not in st.session_state:
+        st.session_state.dash_calendar_month = today.month
 
-    cal_start, cal_end = _month_bounds(st.session_state.dash_calendar_month)
+    cal_title_col, cal_year_col, cal_month_col = st.columns([3, 1, 1])
+    cal_title_col.subheader("날짜별 지출")
+
+    cal_year_default = (
+        st.session_state.dash_calendar_year if st.session_state.dash_calendar_year in year_options else year_options[-1]
+    )
+    cal_year = cal_year_col.selectbox(
+        "연도",
+        options=year_options,
+        format_func=lambda y: f"{y}년",
+        index=year_options.index(cal_year_default),
+        key="dash_calendar_year_select",
+        label_visibility="collapsed",
+    )
+    st.session_state.dash_calendar_year = cal_year
+
+    cal_month_options = list(range(TREND_START_DATE.month, 13)) if cal_year == TREND_START_DATE.year else list(range(1, 13))
+    cal_month_default = (
+        st.session_state.dash_calendar_month
+        if st.session_state.dash_calendar_month in cal_month_options
+        else cal_month_options[-1]
+    )
+    cal_month = cal_month_col.selectbox(
+        "월",
+        options=cal_month_options,
+        format_func=lambda m: f"{m}월",
+        index=cal_month_options.index(cal_month_default),
+        key="dash_calendar_month_select",
+        label_visibility="collapsed",
+    )
+    st.session_state.dash_calendar_month = cal_month
+
+    cal_period_month = f"{cal_year:04d}-{cal_month:02d}"
+    cal_start, cal_end = _month_bounds(cal_period_month)
     cal_daily = daily_expense_in_range(cal_start, cal_end)
-    st.markdown(_calendar_html(st.session_state.dash_calendar_month, cal_daily), unsafe_allow_html=True)
+    st.markdown(_calendar_html(cal_period_month, cal_daily), unsafe_allow_html=True)
