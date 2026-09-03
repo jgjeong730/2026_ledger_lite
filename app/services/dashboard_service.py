@@ -252,6 +252,63 @@ def expense_by_category_range(
     return [dict(r) for r in rows]
 
 
+def expense_by_major_category_by_months(
+    months: list[str], exclude_majors: list[str] | None = None
+) -> list[dict]:
+    """expense_by_major_category_range()의 월별 버전 - 주어진 각 달의 대분류별 지출 합계를 한 번에
+    반환한다 (지출이 있는 (월, 대분류) 조합만 포함, 데이터 없는 조합은 생략됨 - 호출부에서 0으로 채운다)."""
+    ym = dialect.year_month_expr("r.transaction_date")
+    conn = get_connection()
+    try:
+        placeholders = ",".join(["?"] * len(months))
+        query = f"""
+            SELECT {ym} AS month, c.major_category AS major_category, SUM(r.amount) AS amount
+            FROM receipts r
+            JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
+            JOIN categories c ON c.id = cl.category_id
+            WHERE r.entry_type = 'expense' AND r.flow_direction = 'outflow'
+              AND {ym} IN ({placeholders})
+        """
+        params: list = list(months)
+        if exclude_majors:
+            query += f" AND c.major_category NOT IN ({','.join(['?'] * len(exclude_majors))})"
+            params.extend(exclude_majors)
+        query += " GROUP BY month, c.major_category"
+        rows = conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
+def expense_by_category_by_months(
+    months: list[str], exclude_majors: list[str] | None = None
+) -> list[dict]:
+    """expense_by_category_range()의 월별 버전 - 주어진 각 달의 (대분류, 소분류)별 지출 합계를 한 번에
+    반환한다 (지출이 있는 (월, 대분류, 소분류) 조합만 포함, 데이터 없는 조합은 생략됨)."""
+    ym = dialect.year_month_expr("r.transaction_date")
+    conn = get_connection()
+    try:
+        placeholders = ",".join(["?"] * len(months))
+        query = f"""
+            SELECT {ym} AS month, c.major_category AS major_category, c.minor_category AS minor_category,
+                   SUM(r.amount) AS amount
+            FROM receipts r
+            JOIN classifications cl ON cl.receipt_id = r.id AND cl.is_current = 1
+            JOIN categories c ON c.id = cl.category_id
+            WHERE r.entry_type = 'expense' AND r.flow_direction = 'outflow'
+              AND {ym} IN ({placeholders})
+        """
+        params: list = list(months)
+        if exclude_majors:
+            query += f" AND c.major_category NOT IN ({','.join(['?'] * len(exclude_majors))})"
+            params.extend(exclude_majors)
+        query += " GROUP BY month, c.major_category, c.minor_category"
+        rows = conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
 def daily_expense_in_range(start: str, end: str) -> dict[str, int]:
     """기간 내 날짜별 지출 합계 {'YYYY-MM-DD': amount}. 주간 막대 차트/캘린더 뷰 공용."""
     conn = get_connection()

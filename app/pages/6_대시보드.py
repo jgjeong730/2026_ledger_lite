@@ -15,8 +15,9 @@ from app.services.dashboard_service import (
     MAJOR_CATEGORY_ORDER,
     available_months,
     daily_expense_in_range,
+    expense_by_category_by_months,
     expense_by_category_range,
-    expense_by_major_category_range,
+    expense_by_major_category_by_months,
     monthly_income_expense_by_months,
 )
 from app.theme import apply_theme
@@ -259,39 +260,46 @@ with st.container(border=True, key="dash_card_summary"):
     # 위 표와 같은 연도/월 범위의 수입·지출만 그리는 월별 막대그래프 (누적합계는 차트에 넣지 않음)
     x_labels = [f"{int(m['month'][5:7])}월" for m in months_data]
     fig_trend = go.Figure()
+    trend_income = [m["income"] for m in months_data]
+    trend_expense = [m["expense"] for m in months_data]
     fig_trend.add_trace(
         go.Bar(
-            x=x_labels, y=[m["income"] for m in months_data], name="수입", marker_color=INCOME_COLOR,
+            x=x_labels, y=trend_income, name="수입", marker_color=INCOME_COLOR,
+            text=[f"{v / 1000:,.0f}" for v in trend_income],
+            textposition="outside",
             hovertemplate="%{x} 수입 %{y:,.0f}<extra></extra>",
         )
     )
     fig_trend.add_trace(
         go.Bar(
-            x=x_labels, y=[m["expense"] for m in months_data], name="지출", marker_color=EXPENSE_COLOR,
+            x=x_labels, y=trend_expense, name="지출", marker_color=EXPENSE_COLOR,
+            text=[f"{v / 1000:,.0f}" for v in trend_expense],
+            textposition="outside",
             hovertemplate="%{x} 지출 %{y:,.0f}<extra></extra>",
         )
     )
     fig_trend.update_layout(
-        **CHART_LAYOUT_DEFAULTS,
+        **{**CHART_LAYOUT_DEFAULTS, "margin": dict(l=10, r=10, t=30, b=10)},
         barmode="group",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
         xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
         hovermode="x unified",
-        height=300,
+        uniformtext=dict(minsize=10, mode="hide"),
+        height=320,
     )
     st.plotly_chart(fig_trend, use_container_width=True)
 
 st.divider()
 
 # ============================================================
-# 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출 비중/TOP10/카테고리별 상세에 적용됨
+# 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출/소분류 TOP10/카테고리별 상세에 적용됨
 # 드롭다운 대신 대분류를 가로로 나열한 토글 버튼(선택=제외)으로 표시한다.
 # ============================================================
 with st.container(border=True, key="dash_card_filter"):
     st.caption(
         "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 클릭 - "
-        "아래 대분류별 지출 비중·소분류 TOP10·카테고리별 상세에 적용됩니다)"
+        "아래 대분류별 지출·소분류 TOP10·카테고리별 상세에 적용됩니다)"
     )
     exclude_majors = st.pills(
         "분석에서 제외할 대분류",
@@ -301,7 +309,92 @@ with st.container(border=True, key="dash_card_filter"):
         label_visibility="collapsed",
     ) or []
 
-    # 대분류별 지출 비중·TOP10·카테고리별 상세가 함께 참조하는 월 (화살표로 이동)
+    # 맨 위 표와 같은 연도/월 범위(year_months, x_labels)를 그대로 써서 대분류별·소분류별 지출을
+    # 월별 막대그래프로 그린다 - 값 텍스트는 넣지 않고 hover에서만 금액을 보여준다.
+    major_by_month_rows = expense_by_major_category_by_months(year_months, exclude_majors=exclude_majors)
+    minor_by_month_rows = expense_by_category_by_months(year_months, exclude_majors=exclude_majors)
+
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.subheader("대분류별 지출 - 월별")
+        if not major_by_month_rows:
+            st.caption("이 기간에는 지출 내역이 없습니다.")
+        else:
+            by_month_major = {(r["month"], r["major_category"]): r["amount"] for r in major_by_month_rows}
+            present_majors = [m for m in ALL_MAJOR_OPTIONS if any(r["major_category"] == m for r in major_by_month_rows)]
+            fig_major = go.Figure()
+            for major in present_majors:
+                fig_major.add_trace(
+                    go.Bar(
+                        x=x_labels,
+                        y=[by_month_major.get((m, major), 0) for m in year_months],
+                        name=major,
+                        marker_color=MAJOR_CATEGORY_COLORS.get(major, EXPENSE_COLOR),
+                        hovertemplate=f"%{{x}} {major} %{{y:,.0f}}<extra></extra>",
+                    )
+                )
+            fig_major.update_layout(
+                **CHART_LAYOUT_DEFAULTS,
+                barmode="group",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=11)),
+                yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
+                xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
+                hovermode="x unified",
+                height=340,
+            )
+            st.plotly_chart(fig_major, use_container_width=True)
+
+    with col_right:
+        st.subheader("소분류 지출 TOP 10 - 월별")
+        top10_start = f"{year_months[0]}-01"
+        top10_end = _month_bounds(year_months[-1])[1]
+        top10 = expense_by_category_range(top10_start, top10_end, limit=10, exclude_majors=exclude_majors)
+        if not top10:
+            st.caption("이 기간에는 지출 내역이 없습니다.")
+        else:
+            by_month_minor = {
+                (r["month"], r["major_category"], r["minor_category"]): r["amount"] for r in minor_by_month_rows
+            }
+            # 같은 대분류에 속한 소분류가 여러 개면 대분류 색을 공유하되(고정 5색 팔레트를 벗어난
+            # 임의 색을 새로 만들지 않기 위함) 투명도를 단계적으로 낮춰 서로 구분되게 한다.
+            major_seen: dict[str, int] = {}
+            OPACITY_STEPS = [1.0, 0.7, 0.45, 0.3]
+            fig_minor = go.Figure()
+            for r in top10:
+                label = (
+                    r["major_category"] if not r["minor_category"] else f"{r['major_category']}>{r['minor_category']}"
+                )
+                idx = major_seen.get(r["major_category"], 0)
+                major_seen[r["major_category"]] = idx + 1
+                opacity = OPACITY_STEPS[min(idx, len(OPACITY_STEPS) - 1)]
+                fig_minor.add_trace(
+                    go.Bar(
+                        x=x_labels,
+                        y=[by_month_minor.get((m, r["major_category"], r["minor_category"]), 0) for m in year_months],
+                        name=label,
+                        marker_color=MAJOR_CATEGORY_COLORS.get(r["major_category"], EXPENSE_COLOR),
+                        opacity=opacity,
+                        hovertemplate=f"%{{x}} {label} %{{y:,.0f}}<extra></extra>",
+                    )
+                )
+            fig_minor.update_layout(
+                **CHART_LAYOUT_DEFAULTS,
+                barmode="group",
+                legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
+                xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
+                hovermode="x unified",
+                height=340,
+            )
+            st.plotly_chart(fig_minor, use_container_width=True)
+
+st.divider()
+
+# ============================================================
+# 카테고리별 상세 (천원 단위, 중앙정렬, 합계행) - 자체 월 이동 화살표
+# ============================================================
+with st.container(border=True, key="dash_card_detail"):
     if "dash_period_month" not in st.session_state:
         st.session_state.dash_period_month = today.strftime("%Y-%m")
 
@@ -310,104 +403,18 @@ with st.container(border=True, key="dash_card_filter"):
         st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, -1)
         st.rerun()
     period_title.markdown(
-        f"<h4 style='text-align:center;'>{st.session_state.dash_period_month}</h4>", unsafe_allow_html=True
+        f"<h4 style='text-align:center;'>{st.session_state.dash_period_month} 카테고리별 상세</h4>",
+        unsafe_allow_html=True,
     )
     if period_next.button("▶", key="period_next_btn"):
         st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, 1)
         st.rerun()
 
     period_start, period_end = _month_bounds(st.session_state.dash_period_month)
-    major_rows = expense_by_major_category_range(period_start, period_end, exclude_majors=exclude_majors)
     detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
 
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.subheader("대분류별 지출 비중")
-        if not major_rows:
-            st.caption("이 기간에는 지출 내역이 없습니다.")
-        else:
-            majors = [r["major_category"] for r in major_rows]
-            amounts = [r["amount"] for r in major_rows]
-            total_expense = sum(amounts)
-            fig_donut = go.Figure(
-                go.Pie(
-                    labels=majors,
-                    values=amounts,
-                    hole=0.62,
-                    sort=False,
-                    marker=dict(
-                        colors=[MAJOR_CATEGORY_COLORS.get(m, EXPENSE_COLOR) for m in majors],
-                        line=dict(color="#ffffff", width=2),
-                    ),
-                    textinfo="percent",
-                    textfont=dict(size=12, color="#ffffff"),
-                    hovertemplate="%{label} %{value:,.0f}원 (%{percent})<extra></extra>",
-                )
-            )
-            fig_donut.update_layout(
-                **CHART_LAYOUT_DEFAULTS,
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="top", y=-0.05, font=dict(size=11)),
-                height=300,
-                annotations=[
-                    dict(
-                        text=f"{total_expense:,.0f}<br>원",
-                        x=0.5,
-                        y=0.5,
-                        showarrow=False,
-                        font=dict(size=15, color=TEXT_COLOR),
-                    )
-                ],
-            )
-            st.plotly_chart(fig_donut, use_container_width=True)
-
-    with col_right:
-        st.subheader("소분류 지출 TOP 10")
-        top10 = detail_rows[:10]
-        if not top10:
-            st.caption("이 기간에는 지출 내역이 없습니다.")
-        else:
-            labels = [
-                r["major_category"] if not r["minor_category"] else f"{r['major_category']}>{r['minor_category']}"
-                for r in top10
-            ]
-            amounts = [r["amount"] for r in top10]
-            fig_minor = go.Figure(
-                go.Bar(
-                    x=amounts,
-                    y=labels,
-                    orientation="h",
-                    marker_color=EXPENSE_COLOR,
-                    text=[f"{a:,.0f}원" for a in amounts],
-                    textposition="outside",
-                    hovertemplate="%{y} %{x:,.0f}원<extra></extra>",
-                )
-            )
-            fig_minor.update_layout(
-                **CHART_LAYOUT_DEFAULTS,
-                xaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False),
-                yaxis=dict(autorange="reversed", gridcolor="rgba(0,0,0,0)"),
-                showlegend=False,
-                bargap=0.35,
-                height=300,
-            )
-            st.plotly_chart(fig_minor, use_container_width=True)
-
-st.divider()
-
-# ============================================================
-# 카테고리별 상세 (천원 단위, 중앙정렬, 합계행)
-# 도넛/TOP10 바로 위의 화살표(dash_period_month)로 같은 월을 함께 이동한다.
-# ============================================================
-with st.container(border=True, key="dash_card_detail"):
-    st.markdown(
-        f"<h4 style='text-align:center;'>{st.session_state.dash_period_month} 카테고리별 상세</h4>",
-        unsafe_allow_html=True,
-    )
-
     filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
-    st.caption(f"↑ 위쪽 화살표로 월 이동 · '분석에서 제외할 대분류'가 이 표에도 적용됩니다 ({filter_note})")
+    st.caption(f"'분석에서 제외할 대분류' 필터가 이 표에도 적용됩니다 ({filter_note})")
 
     if detail_rows:
         st.markdown(_detail_table_html(detail_rows), unsafe_allow_html=True)
