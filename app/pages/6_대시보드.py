@@ -293,13 +293,13 @@ with st.container(border=True, key="dash_card_summary"):
 st.divider()
 
 # ============================================================
-# 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출/소분류 TOP10/카테고리별 상세에 적용됨
+# 대분류 제외 필터 (기본: 전체 포함) - 대분류 지출/소분류 지출 Top 10/카테고리별 상세에 적용됨
 # 드롭다운 대신 대분류를 가로로 나열한 토글 버튼(선택=제외)으로 표시한다.
 # ============================================================
 with st.container(border=True, key="dash_card_filter"):
     st.caption(
         "분석에서 제외할 대분류 (비정기 대형지출처럼 일상적이지 않은 큰 지출을 빼고 보고 싶을 때 클릭 - "
-        "아래 대분류별 지출·소분류 TOP10·카테고리별 상세에 적용됩니다)"
+        "아래 대분류 지출·소분류 지출 Top 10·카테고리별 상세에 적용됩니다)"
     )
     exclude_majors = st.pills(
         "분석에서 제외할 대분류",
@@ -310,84 +310,81 @@ with st.container(border=True, key="dash_card_filter"):
     ) or []
 
     # 맨 위 표와 같은 연도/월 범위(year_months, x_labels)를 그대로 써서 대분류별·소분류별 지출을
-    # 월별 막대그래프로 그린다 - 값 텍스트는 넣지 않고 hover에서만 금액을 보여준다.
+    # 월별 누적(stacked) 막대그래프로 그린다 - 값 텍스트는 넣지 않고 hover에서만 금액을 보여준다.
+    # 대분류 지출을 위(수입·지출 차트와 같은 폭의 한 단)에, 소분류 지출 Top 10을 그 아래에 둔다.
     major_by_month_rows = expense_by_major_category_by_months(year_months, exclude_majors=exclude_majors)
     minor_by_month_rows = expense_by_category_by_months(year_months, exclude_majors=exclude_majors)
 
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.subheader("대분류별 지출 - 월별")
-        if not major_by_month_rows:
-            st.caption("이 기간에는 지출 내역이 없습니다.")
-        else:
-            by_month_major = {(r["month"], r["major_category"]): r["amount"] for r in major_by_month_rows}
-            present_majors = [m for m in ALL_MAJOR_OPTIONS if any(r["major_category"] == m for r in major_by_month_rows)]
-            fig_major = go.Figure()
-            for major in present_majors:
-                fig_major.add_trace(
-                    go.Bar(
-                        x=x_labels,
-                        y=[by_month_major.get((m, major), 0) for m in year_months],
-                        name=major,
-                        marker_color=MAJOR_CATEGORY_COLORS.get(major, EXPENSE_COLOR),
-                        hovertemplate=f"%{{x}} {major} %{{y:,.0f}}<extra></extra>",
-                    )
+    st.subheader("대분류 지출")
+    if not major_by_month_rows:
+        st.caption("이 기간에는 지출 내역이 없습니다.")
+    else:
+        by_month_major = {(r["month"], r["major_category"]): r["amount"] for r in major_by_month_rows}
+        present_majors = [m for m in ALL_MAJOR_OPTIONS if any(r["major_category"] == m for r in major_by_month_rows)]
+        fig_major = go.Figure()
+        for major in present_majors:
+            fig_major.add_trace(
+                go.Bar(
+                    x=x_labels,
+                    y=[by_month_major.get((m, major), 0) for m in year_months],
+                    name=major,
+                    marker_color=MAJOR_CATEGORY_COLORS.get(major, EXPENSE_COLOR),
+                    hovertemplate=f"%{{x}} {major} %{{y:,.0f}}<extra></extra>",
                 )
-            fig_major.update_layout(
-                **CHART_LAYOUT_DEFAULTS,
-                barmode="group",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=11)),
-                yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
-                xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
-                hovermode="x unified",
-                height=340,
             )
-            st.plotly_chart(fig_major, use_container_width=True)
+        fig_major.update_layout(
+            **{**CHART_LAYOUT_DEFAULTS, "margin": dict(l=10, r=10, t=10, b=10)},
+            barmode="stack",
+            legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02, font=dict(size=11)),
+            yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
+            xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
+            hovermode="x unified",
+            height=340,
+        )
+        st.plotly_chart(fig_major, use_container_width=True)
 
-    with col_right:
-        st.subheader("소분류 지출 TOP 10 - 월별")
-        top10_start = f"{year_months[0]}-01"
-        top10_end = _month_bounds(year_months[-1])[1]
-        top10 = expense_by_category_range(top10_start, top10_end, limit=10, exclude_majors=exclude_majors)
-        if not top10:
-            st.caption("이 기간에는 지출 내역이 없습니다.")
-        else:
-            by_month_minor = {
-                (r["month"], r["major_category"], r["minor_category"]): r["amount"] for r in minor_by_month_rows
-            }
-            # 같은 대분류에 속한 소분류가 여러 개면 대분류 색을 공유하되(고정 5색 팔레트를 벗어난
-            # 임의 색을 새로 만들지 않기 위함) 투명도를 단계적으로 낮춰 서로 구분되게 한다.
-            major_seen: dict[str, int] = {}
-            OPACITY_STEPS = [1.0, 0.7, 0.45, 0.3]
-            fig_minor = go.Figure()
-            for r in top10:
-                label = (
-                    r["major_category"] if not r["minor_category"] else f"{r['major_category']}>{r['minor_category']}"
-                )
-                idx = major_seen.get(r["major_category"], 0)
-                major_seen[r["major_category"]] = idx + 1
-                opacity = OPACITY_STEPS[min(idx, len(OPACITY_STEPS) - 1)]
-                fig_minor.add_trace(
-                    go.Bar(
-                        x=x_labels,
-                        y=[by_month_minor.get((m, r["major_category"], r["minor_category"]), 0) for m in year_months],
-                        name=label,
-                        marker_color=MAJOR_CATEGORY_COLORS.get(r["major_category"], EXPENSE_COLOR),
-                        opacity=opacity,
-                        hovertemplate=f"%{{x}} {label} %{{y:,.0f}}<extra></extra>",
-                    )
-                )
-            fig_minor.update_layout(
-                **CHART_LAYOUT_DEFAULTS,
-                barmode="group",
-                legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
-                xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
-                hovermode="x unified",
-                height=340,
+    st.subheader("소분류 지출 Top 10")
+    top10_start = f"{year_months[0]}-01"
+    top10_end = _month_bounds(year_months[-1])[1]
+    top10 = expense_by_category_range(top10_start, top10_end, limit=10, exclude_majors=exclude_majors)
+    if not top10:
+        st.caption("이 기간에는 지출 내역이 없습니다.")
+    else:
+        by_month_minor = {
+            (r["month"], r["major_category"], r["minor_category"]): r["amount"] for r in minor_by_month_rows
+        }
+        # 같은 대분류에 속한 소분류가 여러 개면 대분류 색을 공유하되(고정 5색 팔레트를 벗어난
+        # 임의 색을 새로 만들지 않기 위함) 투명도를 단계적으로 낮춰 서로 구분되게 한다.
+        major_seen: dict[str, int] = {}
+        OPACITY_STEPS = [1.0, 0.7, 0.45, 0.3]
+        fig_minor = go.Figure()
+        for r in top10:
+            label = (
+                r["major_category"] if not r["minor_category"] else f"{r['major_category']}>{r['minor_category']}"
             )
-            st.plotly_chart(fig_minor, use_container_width=True)
+            idx = major_seen.get(r["major_category"], 0)
+            major_seen[r["major_category"]] = idx + 1
+            opacity = OPACITY_STEPS[min(idx, len(OPACITY_STEPS) - 1)]
+            fig_minor.add_trace(
+                go.Bar(
+                    x=x_labels,
+                    y=[by_month_minor.get((m, r["major_category"], r["minor_category"]), 0) for m in year_months],
+                    name=label,
+                    marker_color=MAJOR_CATEGORY_COLORS.get(r["major_category"], EXPENSE_COLOR),
+                    opacity=opacity,
+                    hovertemplate=f"%{{x}} {label} %{{y:,.0f}}<extra></extra>",
+                )
+            )
+        fig_minor.update_layout(
+            **{**CHART_LAYOUT_DEFAULTS, "margin": dict(l=10, r=10, t=10, b=10)},
+            barmode="stack",
+            legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02, font=dict(size=10)),
+            yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
+            xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
+            hovermode="x unified",
+            height=340,
+        )
+        st.plotly_chart(fig_minor, use_container_width=True)
 
 st.divider()
 
