@@ -18,8 +18,6 @@ from app.services.dashboard_service import (
     expense_by_category_range,
     expense_by_major_category_range,
     monthly_income_expense_by_months,
-    monthly_trend_since,
-    weekly_trend_since,
 )
 from app.theme import apply_theme
 
@@ -29,10 +27,8 @@ apply_theme()
 init_db()
 seed_categories()
 
-# 실제 거래 기록을 시작한 날짜 - 이전 달/주는 데이터가 없을 걸 알기 때문에 추이 그래프에서
-# 빈 공간으로 채우지 않고 아예 표시 범위에서 제외한다.
+# 실제 거래 기록을 시작한 날짜 - 2026년 연도별 표/차트는 이 달 이전을 표시 범위에서 제외한다.
 TREND_START_DATE = date(2026, 7, 1)
-TREND_START_MONTH = TREND_START_DATE.strftime("%Y-%m")
 
 # 대분류 고정 배색 (dataviz 스킬 카테고리컬 팔레트, 라이트모드 슬롯 1~5 - 앱 테마가 라이트라서 라이트
 # 서피스 기준 대비를 통과하는 값을 쓴다). categories 시드 순서와 동일하게 항상 같은 대분류가 같은
@@ -115,13 +111,13 @@ def _yearly_table_html(months_data: list[dict]) -> str:
             sign = "+" if row_key == "net" and value >= 0 else ""
             cells += (
                 f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};text-align:right;">'
-                f"{sign}{value:,}원</td>"
+                f"{sign}{value:,}</td>"
             )
         cum_value = cum[row_key]
         sign = "+" if row_key == "net" and cum_value >= 0 else ""
         cells += (
             f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};text-align:right;'
-            f'font-weight:700;background:{HAS_SPEND_BG};">{sign}{cum_value:,}원</td>'
+            f'font-weight:700;background:{HAS_SPEND_BG};">{sign}{cum_value:,}</td>'
         )
         body_html += f'<tr style="border-top:1px solid {GRID_COLOR};">{cells}</tr>'
 
@@ -243,12 +239,15 @@ if "dash_selected_year" not in st.session_state:
     st.session_state.dash_selected_year = today.year if today.year in year_options else year_options[-1]
 
 with st.container(border=True, key="dash_card_summary"):
-    selected_year = st.selectbox(
+    year_label_col, year_select_col = st.columns([1, 3], vertical_alignment="center")
+    year_label_col.markdown("연도 선택")
+    selected_year = year_select_col.selectbox(
         "연도 선택",
         options=year_options,
         format_func=lambda y: f"{y}년",
         index=year_options.index(st.session_state.dash_selected_year),
         key="dash_year_select",
+        label_visibility="collapsed",
     )
     st.session_state.dash_selected_year = selected_year
 
@@ -257,47 +256,33 @@ with st.container(border=True, key="dash_card_summary"):
     months_data = monthly_income_expense_by_months(year_months)
     st.markdown(_yearly_table_html(months_data), unsafe_allow_html=True)
 
+    # 위 표와 같은 연도/월 범위의 수입·지출만 그리는 월별 막대그래프 (누적합계는 차트에 넣지 않음)
+    x_labels = [f"{int(m['month'][5:7])}월" for m in months_data]
+    fig_trend = go.Figure()
+    fig_trend.add_trace(
+        go.Bar(
+            x=x_labels, y=[m["income"] for m in months_data], name="수입", marker_color=INCOME_COLOR,
+            hovertemplate="%{x} 수입 %{y:,.0f}<extra></extra>",
+        )
+    )
+    fig_trend.add_trace(
+        go.Bar(
+            x=x_labels, y=[m["expense"] for m in months_data], name="지출", marker_color=EXPENSE_COLOR,
+            hovertemplate="%{x} 지출 %{y:,.0f}<extra></extra>",
+        )
+    )
+    fig_trend.update_layout(
+        **CHART_LAYOUT_DEFAULTS,
+        barmode="group",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
+        xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+        height=300,
+    )
+    st.plotly_chart(fig_trend, use_container_width=True)
+
 st.divider()
-
-# ============================================================
-# 지출·수입 추이 (주간/월간 막대그래프, 2026-07-01부터)
-# ============================================================
-trend_card = st.container(border=True, key="dash_card_trend")
-trend_card.subheader("지출·수입 추이")
-trend_mode = trend_card.radio("추이 기간", ["월간", "주간"], horizontal=True, label_visibility="collapsed")
-
-if trend_mode == "월간":
-    trend = monthly_trend_since(TREND_START_MONTH)
-    x_labels = [t["month"] for t in trend]
-else:
-    trend = weekly_trend_since(TREND_START_DATE.isoformat())
-    x_labels = [f"{t['week_start'][5:]}~" for t in trend]
-
-trend_expense = [t["expense"] for t in trend]
-trend_income = [t["income"] for t in trend]
-fig_trend = go.Figure()
-fig_trend.add_trace(
-    go.Bar(
-        x=x_labels, y=trend_income, name="수입", marker_color=INCOME_COLOR,
-        hovertemplate="%{x} 수입 %{y:,.0f}원<extra></extra>",
-    )
-)
-fig_trend.add_trace(
-    go.Bar(
-        x=x_labels, y=trend_expense, name="지출", marker_color=EXPENSE_COLOR,
-        hovertemplate="%{x} 지출 %{y:,.0f}원<extra></extra>",
-    )
-)
-fig_trend.update_layout(
-    **CHART_LAYOUT_DEFAULTS,
-    barmode="group",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
-    xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
-    hovermode="x unified",
-    height=340,
-)
-trend_card.plotly_chart(fig_trend, use_container_width=True)
 
 # ============================================================
 # 대분류 제외 필터 (기본: 전체 포함) - 대분류별 지출 비중/TOP10/카테고리별 상세에 적용됨
