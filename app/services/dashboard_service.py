@@ -306,19 +306,8 @@ def cumulative_summary(today: date | None = None) -> dict:
     return result
 
 
-def monthly_trend_since(start_month: str, today: date | None = None) -> list[dict]:
-    """start_month('YYYY-MM')부터 오늘이 속한 달까지 매달을 고정 윈도우로 반환한다
-    (데이터 없는 달도 0원으로 채워짐 - monthly_trend()와 달리 "데이터가 있는 달만"이 아니다)."""
-    today = today or date.today()
-    y, m = int(start_month[:4]), int(start_month[5:7])
-    months = []
-    while (y, m) <= (today.year, today.month):
-        months.append(f"{y:04d}-{m:02d}")
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
-
+def monthly_income_expense_by_months(months: list[str]) -> list[dict]:
+    """주어진 'YYYY-MM' 목록에 대해 월별 수입/지출 합계를 반환한다 (데이터 없는 달도 0원으로 채워짐)."""
     ym = dialect.year_month_expr("transaction_date")
     placeholders = ",".join(["?"] * len(months))
     conn = get_connection()
@@ -346,6 +335,22 @@ def monthly_trend_since(start_month: str, today: date | None = None) -> list[dic
         }
         for m in months
     ]
+
+
+def monthly_trend_since(start_month: str, today: date | None = None) -> list[dict]:
+    """start_month('YYYY-MM')부터 오늘이 속한 달까지 매달을 고정 윈도우로 반환한다
+    (데이터 없는 달도 0원으로 채워짐 - monthly_trend()와 달리 "데이터가 있는 달만"이 아니다)."""
+    today = today or date.today()
+    y, m = int(start_month[:4]), int(start_month[5:7])
+    months = []
+    while (y, m) <= (today.year, today.month):
+        months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    return monthly_income_expense_by_months(months)
 
 
 def weekly_trend_since(start_date: str, today: date | None = None) -> list[dict]:

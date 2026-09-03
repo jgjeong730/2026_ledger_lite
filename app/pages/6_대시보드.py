@@ -14,10 +14,10 @@ from app.db.seed_categories import seed_categories
 from app.services.dashboard_service import (
     MAJOR_CATEGORY_ORDER,
     available_months,
-    cumulative_summary,
     daily_expense_in_range,
     expense_by_category_range,
     expense_by_major_category_range,
+    monthly_income_expense_by_months,
     monthly_trend_since,
     weekly_trend_since,
 )
@@ -83,15 +83,26 @@ def _month_bounds(year_month: str) -> tuple[str, str]:
     return f"{year_month}-01", f"{year_month}-{last_day:02d}"
 
 
-def _summary_table_html(cum: dict) -> str:
-    """이번 주/이번 달/올해 x 수입/지출/순증감 요약을 작은 글씨 표로 그린다 (수입이 맨 위)."""
-    periods = [("이번 주", "week"), ("이번 달", "month"), ("올해", "year")]
+def _yearly_table_html(months_data: list[dict]) -> str:
+    """선택 연도의 월별(7월/8월/... 또는 1월~12월) x 수입/지출/순증감 표를 그리고, 맨 오른쪽에
+    누적합계 열을 덧붙인다 (수입이 맨 위)."""
     rows = [("수입", "income"), ("지출", "expense"), ("순증감", "net")]
+    for m in months_data:
+        m["net"] = m["income"] - m["expense"]
+    cum = {
+        "income": sum(m["income"] for m in months_data),
+        "expense": sum(m["expense"] for m in months_data),
+    }
+    cum["net"] = cum["income"] - cum["expense"]
 
     header_html = f'<th style="text-align:left;padding:8px 10px;font-size:12px;color:{TEXT_FAINT};"></th>'
     header_html += "".join(
-        f'<th style="text-align:right;padding:8px 10px;font-size:12px;color:{TEXT_FAINT};">{label}</th>'
-        for label, _ in periods
+        f'<th style="text-align:right;padding:8px 10px;font-size:12px;color:{TEXT_FAINT};">{int(m["month"][5:7])}월</th>'
+        for m in months_data
+    )
+    header_html += (
+        f'<th style="text-align:right;padding:8px 10px;font-size:12px;color:{TEXT_FAINT};'
+        'font-weight:700;">누적합계</th>'
     )
 
     body_html = ""
@@ -99,18 +110,26 @@ def _summary_table_html(cum: dict) -> str:
         cells = (
             f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};font-weight:600;">{row_label}</td>'
         )
-        for _, period_key in periods:
-            value = cum[f"{period_key}_{row_key}"]
+        for m in months_data:
+            value = m[row_key]
             sign = "+" if row_key == "net" and value >= 0 else ""
             cells += (
                 f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};text-align:right;">'
                 f"{sign}{value:,}원</td>"
             )
+        cum_value = cum[row_key]
+        sign = "+" if row_key == "net" and cum_value >= 0 else ""
+        cells += (
+            f'<td style="padding:8px 10px;font-size:13px;color:{TEXT_COLOR};text-align:right;'
+            f'font-weight:700;background:{HAS_SPEND_BG};">{sign}{cum_value:,}원</td>'
+        )
         body_html += f'<tr style="border-top:1px solid {GRID_COLOR};">{cells}</tr>'
 
     return (
-        '<table style="width:100%;border-collapse:collapse;">'
+        '<div style="overflow-x:auto;">'
+        '<table style="width:100%;border-collapse:collapse;min-width:520px;">'
         f"<thead><tr>{header_html}</tr></thead><tbody>{body_html}</tbody></table>"
+        "</div>"
     )
 
 
@@ -215,11 +234,28 @@ if not months:
     st.stop()
 
 # ============================================================
-# 누적 현황 (오늘 기준 이번 주/이번 달/올해 누적 수입·지출·순증감, 표)
+# 연도별 월간 수입/지출/순증감 표 + 누적합계 (연도 선택 가능, 2026년은 실제 기록 시작월인
+# 7월부터 표시 - 그 외 연도는 1월~12월 전체)
 # ============================================================
-cum = cumulative_summary()
+today = date.today()
+year_options = list(range(TREND_START_DATE.year, max(TREND_START_DATE.year, today.year) + 1))
+if "dash_selected_year" not in st.session_state:
+    st.session_state.dash_selected_year = today.year if today.year in year_options else year_options[-1]
+
 with st.container(border=True, key="dash_card_summary"):
-    st.markdown(_summary_table_html(cum), unsafe_allow_html=True)
+    selected_year = st.selectbox(
+        "연도 선택",
+        options=year_options,
+        format_func=lambda y: f"{y}년",
+        index=year_options.index(st.session_state.dash_selected_year),
+        key="dash_year_select",
+    )
+    st.session_state.dash_selected_year = selected_year
+
+    start_month_num = TREND_START_DATE.month if selected_year == TREND_START_DATE.year else 1
+    year_months = [f"{selected_year:04d}-{m:02d}" for m in range(start_month_num, 13)]
+    months_data = monthly_income_expense_by_months(year_months)
+    st.markdown(_yearly_table_html(months_data), unsafe_allow_html=True)
 
 st.divider()
 
@@ -230,7 +266,6 @@ trend_card = st.container(border=True, key="dash_card_trend")
 trend_card.subheader("지출·수입 추이")
 trend_mode = trend_card.radio("추이 기간", ["월간", "주간"], horizontal=True, label_visibility="collapsed")
 
-today = date.today()
 if trend_mode == "월간":
     trend = monthly_trend_since(TREND_START_MONTH)
     x_labels = [t["month"] for t in trend]
