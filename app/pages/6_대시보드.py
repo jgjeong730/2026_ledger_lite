@@ -127,7 +127,7 @@ def _calendar_html(month: str, daily: dict[str, int]) -> str:
 
     headers = ["일", "월", "화", "수", "목", "금", "토"]
     header_html = "".join(
-        f'<th style="padding:10px 4px;font-size:13px;font-weight:600;'
+        f'<th style="width:14.2857%;padding:10px 4px;font-size:13px;font-weight:600;text-align:center;'
         f'color:{SUNDAY_COLOR if i == 0 else SATURDAY_COLOR if i == 6 else TEXT_FAINT};">{h}</th>'
         for i, h in enumerate(headers)
     )
@@ -137,7 +137,7 @@ def _calendar_html(month: str, daily: dict[str, int]) -> str:
         cells = ""
         for i, day in enumerate(week):
             if day == 0:
-                cells += '<td style="padding:12px 4px;"></td>'
+                cells += '<td style="width:14.2857%;padding:12px 4px;"></td>'
                 continue
             day_str = f"{year:04d}-{mon:02d}-{day:02d}"
             amount = daily.get(day_str, 0)
@@ -150,7 +150,7 @@ def _calendar_html(month: str, daily: dict[str, int]) -> str:
                 else ""
             )
             cells += (
-                f'<td style="padding:12px 4px;text-align:center;vertical-align:top;'
+                f'<td style="width:14.2857%;padding:12px 4px;text-align:center;vertical-align:top;'
                 f'background:{bg};border-radius:10px;">'
                 f'<div style="font-size:15px;color:{num_color};font-weight:{700 if is_today else 400};">{day}</div>'
                 f"{amount_html}</td>"
@@ -158,7 +158,7 @@ def _calendar_html(month: str, daily: dict[str, int]) -> str:
         rows_html += f"<tr>{cells}</tr>"
 
     return (
-        '<table style="width:100%;border-collapse:collapse;">'
+        '<table style="width:100%;table-layout:fixed;border-collapse:collapse;">'
         f"<thead><tr>{header_html}</tr></thead><tbody>{rows_html}</tbody></table>"
     )
 
