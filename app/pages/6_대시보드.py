@@ -309,27 +309,49 @@ with st.container(border=True, key="dash_card_filter"):
         label_visibility="collapsed",
     ) or []
 
-    # 맨 위 표와 같은 연도/월 범위(year_months, x_labels)를 그대로 써서 대분류별·소분류별 지출을
-    # 월별 누적(stacked) 막대그래프로 그린다 - 값 텍스트는 넣지 않고 hover에서만 금액을 보여준다.
-    # 대분류 지출을 위(수입·지출 차트와 같은 폭의 한 단)에, 소분류 지출 Top 10을 그 아래에 둔다.
-    major_by_month_rows = expense_by_major_category_by_months(year_months, exclude_majors=exclude_majors)
-    minor_by_month_rows = expense_by_category_by_months(year_months, exclude_majors=exclude_majors)
+    # 대분류 지출 - 이 차트만의 독립된 연도 선택 (맨 위 표의 연도와 별개)
+    major_title_col, major_year_col = st.columns([3, 1])
+    major_title_col.subheader("대분류 지출")
+    if "dash_major_chart_year" not in st.session_state:
+        st.session_state.dash_major_chart_year = selected_year
+    major_chart_year = major_year_col.selectbox(
+        "연도",
+        options=year_options,
+        format_func=lambda y: f"{y}년",
+        index=year_options.index(st.session_state.dash_major_chart_year),
+        key="dash_major_year_select",
+        label_visibility="collapsed",
+    )
+    st.session_state.dash_major_chart_year = major_chart_year
+    major_start_month = TREND_START_DATE.month if major_chart_year == TREND_START_DATE.year else 1
+    major_months = [f"{major_chart_year:04d}-{m:02d}" for m in range(major_start_month, 13)]
+    major_x_labels = [f"{int(m[5:7])}월" for m in major_months]
+    major_by_month_rows = expense_by_major_category_by_months(major_months, exclude_majors=exclude_majors)
 
-    st.subheader("대분류 지출")
     if not major_by_month_rows:
         st.caption("이 기간에는 지출 내역이 없습니다.")
     else:
         by_month_major = {(r["month"], r["major_category"]): r["amount"] for r in major_by_month_rows}
         present_majors = [m for m in ALL_MAJOR_OPTIONS if any(r["major_category"] == m for r in major_by_month_rows)]
+        # 그 달에 표시되는 대분류 합계 - hover에 보여줄 비중(%) 계산용 분모
+        major_month_totals = {
+            m: sum(by_month_major.get((m, mj), 0) for mj in present_majors) for m in major_months
+        }
         fig_major = go.Figure()
         for major in present_majors:
+            amounts = [by_month_major.get((m, major), 0) for m in major_months]
+            pct = [
+                (v / major_month_totals[m] * 100) if major_month_totals[m] else 0
+                for v, m in zip(amounts, major_months)
+            ]
             fig_major.add_trace(
                 go.Bar(
-                    x=x_labels,
-                    y=[by_month_major.get((m, major), 0) for m in year_months],
+                    x=major_x_labels,
+                    y=amounts,
                     name=major,
                     marker_color=MAJOR_CATEGORY_COLORS.get(major, EXPENSE_COLOR),
-                    hovertemplate=f"%{{x}} {major} %{{y:,.0f}}<extra></extra>",
+                    customdata=pct,
+                    hovertemplate=f"{major} " + "%{y:,.0f} %{customdata:.0f}%<extra></extra>",
                 )
             )
         fig_major.update_layout(
@@ -338,21 +360,43 @@ with st.container(border=True, key="dash_card_filter"):
             legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02, font=dict(size=11)),
             yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
             xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
-            hovermode="x unified",
+            hovermode="closest",
             height=340,
         )
         st.plotly_chart(fig_major, use_container_width=True)
 
-    st.subheader("소분류 지출 Top 10")
-    top10_start = f"{year_months[0]}-01"
-    top10_end = _month_bounds(year_months[-1])[1]
+    # 소분류 지출 Top 10 - 마찬가지로 독립된 연도 선택
+    minor_title_col, minor_year_col = st.columns([3, 1])
+    minor_title_col.subheader("소분류 지출 Top 10")
+    if "dash_minor_chart_year" not in st.session_state:
+        st.session_state.dash_minor_chart_year = selected_year
+    minor_chart_year = minor_year_col.selectbox(
+        "연도",
+        options=year_options,
+        format_func=lambda y: f"{y}년",
+        index=year_options.index(st.session_state.dash_minor_chart_year),
+        key="dash_minor_year_select",
+        label_visibility="collapsed",
+    )
+    st.session_state.dash_minor_chart_year = minor_chart_year
+    minor_start_month = TREND_START_DATE.month if minor_chart_year == TREND_START_DATE.year else 1
+    minor_months = [f"{minor_chart_year:04d}-{m:02d}" for m in range(minor_start_month, 13)]
+    minor_x_labels = [f"{int(m[5:7])}월" for m in minor_months]
+    minor_by_month_rows = expense_by_category_by_months(minor_months, exclude_majors=exclude_majors)
+    top10_start = f"{minor_months[0]}-01"
+    top10_end = _month_bounds(minor_months[-1])[1]
     top10 = expense_by_category_range(top10_start, top10_end, limit=10, exclude_majors=exclude_majors)
+
     if not top10:
         st.caption("이 기간에는 지출 내역이 없습니다.")
     else:
         by_month_minor = {
             (r["month"], r["major_category"], r["minor_category"]): r["amount"] for r in minor_by_month_rows
         }
+        # 그 달에 표시되는 대분류 합계(대분류 지출 차트와 같은 분모)를 hover 비중(%) 계산에 쓴다.
+        minor_by_month_major_totals: dict[str, int] = {}
+        for r in minor_by_month_rows:
+            minor_by_month_major_totals[r["month"]] = minor_by_month_major_totals.get(r["month"], 0) + r["amount"]
         # 같은 대분류에 속한 소분류가 여러 개면 대분류 색을 공유하되(고정 5색 팔레트를 벗어난
         # 임의 색을 새로 만들지 않기 위함) 투명도를 단계적으로 낮춰 서로 구분되게 한다.
         major_seen: dict[str, int] = {}
@@ -365,14 +409,20 @@ with st.container(border=True, key="dash_card_filter"):
             idx = major_seen.get(r["major_category"], 0)
             major_seen[r["major_category"]] = idx + 1
             opacity = OPACITY_STEPS[min(idx, len(OPACITY_STEPS) - 1)]
+            amounts = [by_month_minor.get((m, r["major_category"], r["minor_category"]), 0) for m in minor_months]
+            pct = [
+                (v / minor_by_month_major_totals[m] * 100) if minor_by_month_major_totals.get(m) else 0
+                for v, m in zip(amounts, minor_months)
+            ]
             fig_minor.add_trace(
                 go.Bar(
-                    x=x_labels,
-                    y=[by_month_minor.get((m, r["major_category"], r["minor_category"]), 0) for m in year_months],
+                    x=minor_x_labels,
+                    y=amounts,
                     name=label,
                     marker_color=MAJOR_CATEGORY_COLORS.get(r["major_category"], EXPENSE_COLOR),
                     opacity=opacity,
-                    hovertemplate=f"%{{x}} {label} %{{y:,.0f}}<extra></extra>",
+                    customdata=pct,
+                    hovertemplate=f"{label} " + "%{y:,.0f} %{customdata:.0f}%<extra></extra>",
                 )
             )
         fig_minor.update_layout(
@@ -381,7 +431,7 @@ with st.container(border=True, key="dash_card_filter"):
             legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02, font=dict(size=10)),
             yaxis=dict(gridcolor=GRID_COLOR, tickformat=",.0f", zeroline=False, rangemode="tozero"),
             xaxis=dict(type="category", gridcolor="rgba(0,0,0,0)"),
-            hovermode="x unified",
+            hovermode="closest",
             height=340,
         )
         st.plotly_chart(fig_minor, use_container_width=True)
@@ -392,26 +442,49 @@ st.divider()
 # 카테고리별 상세 (천원 단위, 중앙정렬, 합계행) - 자체 월 이동 화살표
 # ============================================================
 with st.container(border=True, key="dash_card_detail"):
-    if "dash_period_month" not in st.session_state:
-        st.session_state.dash_period_month = today.strftime("%Y-%m")
+    if "dash_detail_year" not in st.session_state:
+        st.session_state.dash_detail_year = today.year
+    if "dash_detail_month" not in st.session_state:
+        st.session_state.dash_detail_month = today.month
 
-    period_prev, period_title, period_next = st.columns([1, 6, 1])
-    if period_prev.button("◀", key="period_prev_btn"):
-        st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, -1)
-        st.rerun()
-    period_title.markdown(
-        f"<h4 style='text-align:center;'>{st.session_state.dash_period_month} 카테고리별 상세</h4>",
-        unsafe_allow_html=True,
+    detail_title_col, detail_year_col, detail_month_col = st.columns([3, 1, 1])
+    detail_title_col.subheader("카테고리별 상세")
+
+    detail_year_default = (
+        st.session_state.dash_detail_year if st.session_state.dash_detail_year in year_options else year_options[-1]
     )
-    if period_next.button("▶", key="period_next_btn"):
-        st.session_state.dash_period_month = _shift_month(st.session_state.dash_period_month, 1)
-        st.rerun()
+    detail_year = detail_year_col.selectbox(
+        "연도",
+        options=year_options,
+        format_func=lambda y: f"{y}년",
+        index=year_options.index(detail_year_default),
+        key="dash_detail_year_select",
+        label_visibility="collapsed",
+    )
+    st.session_state.dash_detail_year = detail_year
 
-    period_start, period_end = _month_bounds(st.session_state.dash_period_month)
+    detail_month_options = list(range(TREND_START_DATE.month, 13)) if detail_year == TREND_START_DATE.year else list(range(1, 13))
+    detail_month_default = (
+        st.session_state.dash_detail_month
+        if st.session_state.dash_detail_month in detail_month_options
+        else detail_month_options[-1]
+    )
+    detail_month = detail_month_col.selectbox(
+        "월",
+        options=detail_month_options,
+        format_func=lambda m: f"{m}월",
+        index=detail_month_options.index(detail_month_default),
+        key="dash_detail_month_select",
+        label_visibility="collapsed",
+    )
+    st.session_state.dash_detail_month = detail_month
+
+    detail_period_month = f"{detail_year:04d}-{detail_month:02d}"
+    period_start, period_end = _month_bounds(detail_period_month)
     detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
 
     filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
-    st.caption(f"'분석에서 제외할 대분류' 필터가 이 표에도 적용됩니다 ({filter_note})")
+    st.caption(f"{detail_period_month} 기준 · '분석에서 제외할 대분류' 필터가 이 표에도 적용됩니다 ({filter_note})")
 
     if detail_rows:
         st.markdown(_detail_table_html(detail_rows), unsafe_allow_html=True)
