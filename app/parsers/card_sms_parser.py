@@ -14,9 +14,10 @@
     2026.07.01 20:43
 
 3) 빠른 수기입력용 축약형 - 한 줄에 "월/일 가맹점 금액"만 (연도·카드사·할부구분 없음,
-   여러 건을 줄바꿈만으로 죽 이어 붙여도 한 줄씩 개별 처리된다):
+   여러 건을 줄바꿈만으로 죽 이어 붙여도 한 줄씩 개별 처리된다). "가맹점 금액 월/일"처럼
+   날짜가 맨 뒤에 오는 순서도 함께 지원한다:
     7/1 쿠팡이츠 11000
-    7/2 쿠팡이츠 24300
+    쿠팡이츠 24300 7/2
 
 카드사/통신사마다 표현이 다를 수 있어 세 형식을 순서대로 시도하고, 다 안 맞으면
 CardSmsParseError를 던진다. AI 없이 정규식만으로 파싱하며, 가맹점 기반 카테고리 분류는
@@ -49,6 +50,10 @@ _DATETIME_LINE_RE = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2})$")
 
 # "월/일 가맹점 금액[원]" 한 줄 축약형. 가맹점명에 공백이 있어도 되도록 비탐욕 매칭.
 _QUICK_LINE_RE = re.compile(r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+(?P<merchant>.+?)\s+(?P<amount>[\d,]+)원?$")
+# "가맹점 금액[원] 월/일" - 날짜가 맨 뒤에 오는 축약형 (날짜를 마지막에 입력하는 사용 습관 지원).
+_QUICK_LINE_TRAILING_DATE_RE = re.compile(
+    r"^(?P<merchant>.+?)\s+(?P<amount>[\d,]+)원?\s+(?P<month>\d{1,2})/(?P<day>\d{1,2})$"
+)
 
 
 class CardSmsParseError(ValueError):
@@ -94,11 +99,15 @@ def split_messages(raw_text: str) -> list[str]:
             continue
 
         lines = [line.strip() for line in para.splitlines() if line.strip()]
-        if lines and all(_QUICK_LINE_RE.match(line) for line in lines):
+        if lines and all(_is_quick_line(line) for line in lines):
             blocks.extend(lines)
         else:
             blocks.append(para)
     return blocks
+
+
+def _is_quick_line(line: str) -> bool:
+    return bool(_QUICK_LINE_RE.match(line) or _QUICK_LINE_TRAILING_DATE_RE.match(line))
 
 
 def parse_card_sms(text: str, *, reference_date: Optional[date] = None) -> ParsedCardSms:
@@ -160,7 +169,8 @@ def _parse_line_format(text: str) -> Optional[ParsedCardSms]:
 
 
 def _parse_quick_format(text: str, reference_date: Optional[date]) -> Optional[ParsedCardSms]:
-    match = _QUICK_LINE_RE.match(text.strip())
+    stripped = text.strip()
+    match = _QUICK_LINE_RE.match(stripped) or _QUICK_LINE_TRAILING_DATE_RE.match(stripped)
     if not match:
         return None
 
