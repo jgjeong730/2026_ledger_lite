@@ -50,6 +50,11 @@ _DATETIME_LINE_RE = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2})$")
 
 # "월/일 가맹점 금액[원]" 한 줄 축약형. 가맹점명에 공백이 있어도 되도록 비탐욕 매칭.
 _QUICK_LINE_RE = re.compile(r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+(?P<merchant>.+?)\s+(?P<amount>[\d,]+)원?$")
+# 날짜/금액/가맹점 순서의 간편 입력도 지원한다. 예: `9/23 20,960 쿠팡`
+_QUICK_LINE_DATE_AMOUNT_RE = re.compile(
+    r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+"
+    r"(?P<amount>[\d,]+)원?\s+(?P<merchant>.+?)$"
+)
 # "가맹점 금액[원] 월/일" - 날짜가 맨 뒤에 오는 축약형 (날짜를 마지막에 입력하는 사용 습관 지원).
 _QUICK_LINE_TRAILING_DATE_RE = re.compile(
     r"^(?P<merchant>.+?)\s+(?P<amount>[\d,]+)원?\s+(?P<month>\d{1,2})/(?P<day>\d{1,2})$"
@@ -86,8 +91,11 @@ def split_messages(raw_text: str) -> list[str]:
 
     '#'으로 시작하는 주석 줄(픽스처 파일의 안내문 등)은 무시한다.
     """
+    # 일부 복사/전달 경로에서는 줄바꿈이 실제 개행이 아닌 리터럴 `\n`으로 들어온다.
+    # 두 입력을 동일하게 처리해 여러 건을 한 메시지로 오인하지 않도록 한다.
+    normalized_text = raw_text.replace("\\r\\n", "\n").replace("\\n", "\n")
     cleaned = "\n".join(
-        line for line in raw_text.splitlines() if not line.strip().startswith("#")
+        line for line in normalized_text.splitlines() if not line.strip().startswith("#")
     )
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", cleaned.strip()) if p.strip()]
 
@@ -107,7 +115,11 @@ def split_messages(raw_text: str) -> list[str]:
 
 
 def _is_quick_line(line: str) -> bool:
-    return bool(_QUICK_LINE_RE.match(line) or _QUICK_LINE_TRAILING_DATE_RE.match(line))
+    return bool(
+        _QUICK_LINE_RE.match(line)
+        or _QUICK_LINE_DATE_AMOUNT_RE.match(line)
+        or _QUICK_LINE_TRAILING_DATE_RE.match(line)
+    )
 
 
 def parse_card_sms(text: str, *, reference_date: Optional[date] = None) -> ParsedCardSms:
@@ -170,7 +182,11 @@ def _parse_line_format(text: str) -> Optional[ParsedCardSms]:
 
 def _parse_quick_format(text: str, reference_date: Optional[date]) -> Optional[ParsedCardSms]:
     stripped = text.strip()
-    match = _QUICK_LINE_RE.match(stripped) or _QUICK_LINE_TRAILING_DATE_RE.match(stripped)
+    match = (
+        _QUICK_LINE_RE.match(stripped)
+        or _QUICK_LINE_DATE_AMOUNT_RE.match(stripped)
+        or _QUICK_LINE_TRAILING_DATE_RE.match(stripped)
+    )
     if not match:
         return None
 

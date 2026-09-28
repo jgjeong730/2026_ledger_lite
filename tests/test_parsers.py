@@ -151,6 +151,36 @@ def test_parse_card_sms_quick_format():
     assert parsed[2].amount == 42220
 
 
+DATE_AMOUNT_QUICK_FORMAT_SAMPLE = (
+    "9/23 20960 쿠팡\n"
+    "9/24 15800 쿠팡이츠\n"
+    "9/25 24700 쿠팡이츠\n"
+    "9/26 26735 쿠팡이츠\n"
+    "9/27 15400 쿠팡이츠\n"
+    "9/28 6070 쿠팡"
+)
+
+
+def test_parse_card_sms_quick_format_date_amount_merchant_order():
+    messages = split_card_sms_messages(DATE_AMOUNT_QUICK_FORMAT_SAMPLE)
+    parsed = [parse_card_sms(m, reference_date=date(2026, 9, 28)) for m in messages]
+
+    assert len(parsed) == 6
+    assert [(item.txn_date, item.amount, item.merchant) for item in parsed] == [
+        ("2026-09-23", 20960, "쿠팡"),
+        ("2026-09-24", 15800, "쿠팡이츠"),
+        ("2026-09-25", 24700, "쿠팡이츠"),
+        ("2026-09-26", 26735, "쿠팡이츠"),
+        ("2026-09-27", 15400, "쿠팡이츠"),
+        ("2026-09-28", 6070, "쿠팡"),
+    ]
+
+
+def test_split_card_sms_quick_format_accepts_escaped_newlines():
+    raw = "9/23 20960 쿠팡\\n9/24 15800 쿠팡이츠"
+    assert split_card_sms_messages(raw) == ["9/23 20960 쿠팡", "9/24 15800 쿠팡이츠"]
+
+
 def test_split_card_sms_quick_format_mixed_with_tagged_paragraph():
     mixed = (
         "[Web발신] 현대카드M 승인 정*구 100,000원 일시불 08/08 09:48 대신주유소 누적669,523원\n"
