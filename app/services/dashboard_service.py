@@ -224,7 +224,12 @@ def expense_by_major_category_range(
 
 
 def expense_by_category_range(
-    start: str, end: str, limit: int | None = None, exclude_majors: list[str] | None = None
+    start: str,
+    end: str,
+    limit: int | None = None,
+    exclude_majors: list[str] | None = None,
+    major_category: str | list[str] | None = None,
+    minor_category: str | list[str] | None = None,
 ) -> list[dict]:
     """expense_by_category()의 임의 기간 버전. exclude_majors는 expense_by_major_category_range()와 동일."""
     conn = get_connection()
@@ -242,6 +247,14 @@ def expense_by_category_range(
         if exclude_majors:
             query += f" AND c.major_category NOT IN ({','.join(['?'] * len(exclude_majors))})"
             params.extend(exclude_majors)
+        if major_category:
+            major_values = [major_category] if isinstance(major_category, str) else major_category
+            query += f" AND c.major_category IN ({','.join(['?'] * len(major_values))})"
+            params.extend(major_values)
+        if minor_category:
+            minor_values = [minor_category] if isinstance(minor_category, str) else minor_category
+            query += f" AND c.minor_category IN ({','.join(['?'] * len(minor_values))})"
+            params.extend(minor_values)
         query += " GROUP BY c.major_category, c.minor_category ORDER BY amount DESC"
         if limit is not None:
             query += " LIMIT ?"

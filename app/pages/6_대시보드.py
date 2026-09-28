@@ -20,6 +20,7 @@ from app.services.dashboard_service import (
     expense_by_major_category_by_months,
     monthly_income_expense_by_months,
 )
+from app.services.category_service import list_expense_categories
 from app.theme import apply_theme
 
 st.set_page_config(page_title="대시보드 - ledger-lite", page_icon="\U0001F4CA", layout="wide")
@@ -435,7 +436,9 @@ with st.container(border=True, key="dash_card_detail"):
     if "dash_detail_month" not in st.session_state:
         st.session_state.dash_detail_month = today.month
 
-    detail_title_col, detail_year_col, detail_month_col = st.columns([3, 1, 1])
+    detail_title_col, detail_year_col, detail_month_col, detail_major_col, detail_minor_col = st.columns(
+        [2.5, 1, 1, 1.5, 1.5]
+    )
     detail_title_col.subheader("카테고리별 상세")
 
     detail_year_default = (
@@ -467,12 +470,56 @@ with st.container(border=True, key="dash_card_detail"):
     )
     st.session_state.dash_detail_month = detail_month
 
+    detail_categories = list_expense_categories()
+    detail_major_options = ["전체"] + list(detail_categories.keys())
+    detail_major = detail_major_col.multiselect(
+        "대분류",
+        options=detail_major_options[1:],
+        key="dash_detail_major_select",
+        label_visibility="collapsed",
+    )
+    if not detail_major:
+        detail_minor_options = list(
+            dict.fromkeys(
+                minor["minor_category"]
+                for minors in detail_categories.values()
+                for minor in minors
+            )
+        )
+    else:
+        detail_minor_options = list(
+            dict.fromkeys(
+                minor["minor_category"]
+                for major in detail_major
+                for minor in detail_categories[major]
+            )
+        )
+    detail_minor = detail_minor_col.multiselect(
+        "소분류",
+        options=detail_minor_options,
+        key=f"dash_detail_minor_select_{'-'.join(detail_major)}",
+        label_visibility="collapsed",
+    )
+
     detail_period_month = f"{detail_year:04d}-{detail_month:02d}"
     period_start, period_end = _month_bounds(detail_period_month)
-    detail_rows = expense_by_category_range(period_start, period_end, exclude_majors=exclude_majors)
+    detail_rows = expense_by_category_range(
+        period_start,
+        period_end,
+        exclude_majors=exclude_majors,
+        major_category=detail_major or None,
+        minor_category=detail_minor or None,
+    )
 
     filter_note = f"제외 중: {', '.join(exclude_majors)}" if exclude_majors else "전체 대분류 포함 중"
-    st.caption(f"{detail_period_month} 기준 · '분석에서 제외할 대분류' 필터가 이 표에도 적용됩니다 ({filter_note})")
+    selected_note = (
+        f"대분류: {', '.join(detail_major) if detail_major else '전체'} · "
+        f"소분류: {', '.join(detail_minor) if detail_minor else '전체'}"
+    )
+    st.caption(
+        f"{detail_period_month} 기준 · {selected_note} · "
+        f"'분석에서 제외할 대분류' 필터가 이 표에도 적용됩니다 ({filter_note})"
+    )
 
     if detail_rows:
         st.markdown(_detail_table_html(detail_rows), unsafe_allow_html=True)

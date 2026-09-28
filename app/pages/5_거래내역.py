@@ -24,19 +24,51 @@ seed_categories()
 
 st.title("\U0001F4CB 거래내역 확인 / 재분류")
 
-col1, col2, col3 = st.columns(3)
+available_month_values = available_months()
+year_options = sorted({int(month[:4]) for month in available_month_values} | {date.today().year})
+
+col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1.2, 1.4, 1.4])
 with col1:
-    status_label = st.selectbox("상태", ["전체", "확인 필요", "확인 완료"])
-with col2:
     type_label = st.selectbox("구분", ["전체", "지출", "수입"])
+with col2:
+    year_label = st.selectbox("연도", ["전체"] + year_options)
 with col3:
-    month_label = st.selectbox("월", ["전체"] + available_months())
+    month_label = st.selectbox("월", ["전체"] + list(range(1, 13)), format_func=lambda m: "전체" if m == "전체" else f"{m}월")
+with col4:
+    expense_categories = list_expense_categories()
+    major_label = st.multiselect("대분류", list(expense_categories.keys()))
+with col5:
+    if not major_label:
+        minor_options = list(
+            dict.fromkeys(
+                minor["minor_category"]
+                for minors in expense_categories.values()
+                for minor in minors
+            )
+        )
+    else:
+        minor_options = list(
+            dict.fromkeys(
+                minor["minor_category"]
+                for major in major_label
+                for minor in expense_categories[major]
+            )
+        )
+    minor_label = st.multiselect("소분류", minor_options, key=f"transaction_minor_{'-'.join(major_label)}")
 
-review_status = {"확인 필요": "needs_review", "확인 완료": "confirmed"}.get(status_label)
 entry_type = {"지출": "expense", "수입": "income"}.get(type_label)
-month = None if month_label == "전체" else month_label
+year = None if year_label == "전체" else year_label
+month_number = None if month_label == "전체" else month_label
+major_category = major_label or None
+minor_category = minor_label or None
 
-receipts = list_receipts(review_status=review_status, entry_type=entry_type, month=month)
+receipts = list_receipts(
+    entry_type=entry_type,
+    year=year,
+    month_number=month_number,
+    major_category=major_category,
+    minor_category=minor_category,
+)
 
 if not receipts:
     st.info("표시할 거래가 없습니다.")

@@ -608,6 +608,10 @@ def list_receipts(
     review_status: str | None = None,
     entry_type: str | None = None,
     month: str | None = None,
+    year: int | None = None,
+    month_number: int | None = None,
+    major_category: str | list[str] | None = None,
+    minor_category: str | list[str] | None = None,
 ) -> list[dict]:
     query = """
         SELECT r.id, r.entry_type, r.source_type, r.flow_direction, r.merchant_name, r.amount,
@@ -628,6 +632,20 @@ def list_receipts(
     if month:
         query += f" AND {dialect.year_month_expr('r.transaction_date')} = ?"
         params.append(month)
+    if year is not None:
+        query += " AND SUBSTRING(r.transaction_date, 1, 4) = ?"
+        params.append(str(year))
+    if month_number is not None:
+        query += " AND SUBSTRING(r.transaction_date, 6, 2) = ?"
+        params.append(f"{month_number:02d}")
+    if major_category:
+        major_values = [major_category] if isinstance(major_category, str) else major_category
+        query += f" AND cat.major_category IN ({','.join(['?'] * len(major_values))})"
+        params.extend(major_values)
+    if minor_category:
+        minor_values = [minor_category] if isinstance(minor_category, str) else minor_category
+        query += f" AND cat.minor_category IN ({','.join(['?'] * len(minor_values))})"
+        params.extend(minor_values)
     query += " ORDER BY r.transaction_date DESC, r.id DESC LIMIT ?"
     params.append(limit)
 
