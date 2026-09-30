@@ -249,3 +249,11 @@ def test_parse_kakaopay_date_first_line_format():
     assert parsed.amount == 6600
     assert parsed.flow_direction == "outflow"
     assert parsed.txn_date == "2026-09-21"
+
+
+def test_parse_kakaopay_date_room_amount_line_format():
+    parsed = parse_kakaopay("9/21 테니스 6,600", reference_date=date(2026, 9, 30))
+    assert parsed.room == "테니스"
+    assert parsed.amount == 6600
+    assert parsed.flow_direction == "outflow"
+    assert parsed.txn_date == "2026-09-21"
