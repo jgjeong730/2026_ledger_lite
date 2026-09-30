@@ -241,3 +241,11 @@ def test_parse_kakaopay_line_format_amount_without_won_suffix():
     parsed = parse_kakaopay("이희근 19500 7/3", reference_date=date(2026, 8, 9))
     assert parsed.room == "이희근"
     assert parsed.amount == 19500
+
+
+def test_parse_kakaopay_date_first_line_format():
+    parsed = parse_kakaopay("9/21 6,600 테니스", reference_date=date(2026, 9, 30))
+    assert parsed.room == "테니스"
+    assert parsed.amount == 6600
+    assert parsed.flow_direction == "outflow"
+    assert parsed.txn_date == "2026-09-21"

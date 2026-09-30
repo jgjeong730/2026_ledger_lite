@@ -10,6 +10,10 @@
     테니스 6700원 7/3
     이희근 19500 7/3
 
+3) 날짜가 앞에 오는 간편 형식:
+    9/21 6600 테니스
+    9/22 51966 김현용
+
 2번 형식은 방향 표시가 없어 항상 outflow(보냄)로 간주한다 - 이 채널은 보통 모임비/정산을
 내 계좌에서 상대에게 보내는 용도로 쓰이기 때문. 받은 건이 섞여 있으면 거래내역 페이지에서
 직접 방향을 바로잡아야 한다. 연도도 없어 기준일(보통 오늘) 근처로 추정한다.
@@ -32,6 +36,10 @@ _TAGGED_RE = re.compile(
 
 _LINE_FORMAT_RE = re.compile(
     r"^(?P<room>.+?)\s+(?P<amount>[\d,]+)원?\s+(?P<month>\d{1,2})/(?P<day>\d{1,2})$"
+)
+
+_DATE_FIRST_RE = re.compile(
+    r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+(?P<amount>[\d,]+)원?\s+(?P<room>.+?)$"
 )
 
 
@@ -83,6 +91,8 @@ def _parse_tagged_format(text: str) -> Optional[ParsedKakaopay]:
 def _parse_line_format(text: str, reference_date: Optional[date]) -> Optional[ParsedKakaopay]:
     normalized = " ".join(text.split())
     match = _LINE_FORMAT_RE.match(normalized)
+    if not match:
+        match = _DATE_FIRST_RE.match(normalized)
     if not match:
         return None
 
