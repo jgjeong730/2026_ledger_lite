@@ -33,7 +33,8 @@ _MESSAGE_START_RE = re.compile(r"(?=\[Web발신\])")
 
 _CARD_SMS_RE = re.compile(
     r"\[Web발신\]\s*"
-    r"(?P<company>.+?)\s+승인\s+"
+    # 삼성카드처럼 카드번호 뒷자리와 '승인'이 붙어 오는 형식도 지원한다.
+    r"(?P<company>.+?)\s*승인\s+"
     r"(?P<holder>\S+)\s+"
     r"(?P<amount>[\d,]+)원\s+"
     r"(?P<installment>\S+)\s+"
