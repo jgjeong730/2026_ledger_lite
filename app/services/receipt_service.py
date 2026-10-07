@@ -373,7 +373,8 @@ def ingest_card_sms(raw_text: str) -> dict:
         transaction_date=parsed.txn_date,
         transaction_time=parsed.txn_time,
         payment_method=parsed.company,
-        review_status="needs_review",
+        # 가맹점 규칙은 사용자가 확정한 학습 규칙/시스템 규칙이므로 재확인하지 않는다.
+        review_status="confirmed" if rule else "needs_review",
     )
     classify_receipt(
         receipt_id, category_id, classified_by, rule_id=rule_id, confidence=confidence, note=note

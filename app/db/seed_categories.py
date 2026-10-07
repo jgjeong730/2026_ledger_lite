@@ -130,6 +130,7 @@ def seed_categories() -> int:
 
         _migrate_dining_split(conn)
         _seed_system_merchant_rules(conn)
+        _confirm_rule_classified_receipts(conn)
 
         conn.commit()
         return cur.rowcount
@@ -192,6 +193,23 @@ def _seed_system_merchant_rules(conn) -> None:
             """,
             (match_type, pattern, source_type, category["id"], priority),
         )
+
+
+def _confirm_rule_classified_receipts(conn) -> None:
+    """이미 규칙으로 분류된 거래는 확인 필요 상태를 해제한다."""
+    conn.execute(
+        """
+        UPDATE receipts
+        SET review_status = 'confirmed'
+        WHERE source_type IN ('card_sms', 'kakaopay')
+          AND review_status = 'needs_review'
+          AND id IN (
+              SELECT cl.receipt_id
+              FROM classifications cl
+              WHERE cl.is_current = 1 AND cl.classified_by = 'rule'
+          )
+        """
+    )
 
 
 if __name__ == "__main__":
